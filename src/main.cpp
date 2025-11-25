@@ -10,8 +10,10 @@ int main (int, char**) {
 
   // We can check whether there is actually an instance created
   if (!instance) {
-    std::cerr << "Could not initialize WebGPU!" << std::endl;
+    std::cerr << "@ERROR Could not initialize WebGPU!" << std::endl;
     return 1;
+  }else{
+    std::cout << "@INFO Initalized WebGPU" << std::endl;
   }
 
   // Display the object (WGPUInstance is a simple pointer, it may be

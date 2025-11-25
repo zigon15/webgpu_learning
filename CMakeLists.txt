@@ -16,7 +16,7 @@ set_target_properties(App PROPERTIES
 target_compile_options(App PRIVATE -Wall -Wextra -pedantic)
 
 # Add the 'webgpu' target as a dependency of our App
-add_subdirectory(webgpu)
+add_subdirectory(lib/webgpu)
 target_link_libraries(App PRIVATE webgpu)
 
 # The application's binary must find wgpu.dll or libwgpu.so at runtime,
