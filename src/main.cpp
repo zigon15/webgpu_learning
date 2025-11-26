@@ -1,24 +1,24 @@
-#include <webgpu/webgpu.h>
-#include <iostream>
+#include "application.hpp"
 
-int main (int, char**) {
-  WGPUInstanceDescriptor desc = {};
-  desc.nextInChain = nullptr;
+int main(int, char **) {
+  Application app;
 
-  // We create the instance using this descriptor
-  WGPUInstance instance = wgpuCreateInstance(&desc);
-
-  // We can check whether there is actually an instance created
-  if (!instance) {
-    std::cerr << "@ERROR Could not initialize WebGPU!" << std::endl;
+  if (!app.Initialize()) {
     return 1;
-  }else{
-    std::cout << "@INFO Initalized WebGPU" << std::endl;
   }
 
-  // Display the object (WGPUInstance is a simple pointer, it may be
-  // copied around without worrying about its size).
-  std::cout << "WGPU instance: " << instance << std::endl;
+  // Warning: this is still not Emscripten-friendly, see below
+  while (app.IsRunning()) {
+    app.MainLoop();
+  }
+
+  app.Terminate();
+  return 0;
+
+  // for (int i = 0; i < 5; ++i) {
+  //   std::cout << "Tick/Poll device..." << std::endl;
+  //   wgpuDeviceTick(device);
+  // }
 
   return 0;
 }

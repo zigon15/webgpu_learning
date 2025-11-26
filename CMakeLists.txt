@@ -5,7 +5,7 @@ project(
     LANGUAGES CXX C 
 )
 
-add_executable(App src/main.cpp)
+add_executable(App src/main.cpp src/application.cpp)
 
 set_target_properties(App PROPERTIES
     CXX_STANDARD 23
@@ -15,9 +15,10 @@ set_target_properties(App PROPERTIES
 )
 target_compile_options(App PRIVATE -Wall -Wextra -pedantic)
 
-# Add the 'webgpu' target as a dependency of our App
+# Add dependencies
 add_subdirectory(lib/webgpu)
-target_link_libraries(App PRIVATE webgpu)
+add_subdirectory(lib/glfw3webgpu)
+target_link_libraries(App PRIVATE webgpu glfw glfw3webgpu)
 
 # The application's binary must find wgpu.dll or libwgpu.so at runtime,
 # so we automatically copy it (it's called WGPU_RUNTIME_LIB in general)
