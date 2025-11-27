@@ -12,5 +12,5 @@ cmake --build "$BUILD_DIR" -j$(nproc)
 cp $BUILD_DIR/compile_commands.json ./build/compile_commands.json
 
 # Run
-cd "$BUILD_DIR"
-./App
+# cd "$BUILD_DIR"
+# ./App
