@@ -23,6 +23,8 @@ public:
 private:
   std::pair<wgpu::SurfaceTexture, wgpu::TextureView> _GetNextSurfaceViewData();
   void _InitializePipeline();
+  wgpu::RequiredLimits _GetRequiredLimits(wgpu::Adapter adapter) const;
+  void _InitializeBuffers();
 
 private:
   GLFWwindow *window;
@@ -32,6 +34,8 @@ private:
   std::unique_ptr<wgpu::ErrorCallback> uncapturedErrorCallbackHandle;
   wgpu::TextureFormat surfaceFormat = wgpu::TextureFormat::Undefined;
   wgpu::RenderPipeline pipeline;
+  wgpu::Buffer vertexBuffer;
+  uint32_t vertexCount;
 };
 
 #endif
