@@ -7,7 +7,7 @@ BUILD_DIR="build/release"
 cmake . -DCMAKE_EXPORT_COMPILE_COMMANDS=1 -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release
 
 # Build
-cmake --build "$BUILD_DIR" -j$(nproc)
+cmake --build "$BUILD_DIR" -j$(nproc --ignore=2)
 
 cp $BUILD_DIR/compile_commands.json ./build/compile_commands.json
 

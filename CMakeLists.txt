@@ -5,7 +5,7 @@ project(
     LANGUAGES CXX C 
 )
 
-add_executable(App src/main.cpp src/application.cpp)
+add_executable(App src/main.cpp src/Application.cpp src/ResourceManager.cpp)
 
 set_target_properties(App PROPERTIES
     CXX_STANDARD 23
@@ -14,6 +14,11 @@ set_target_properties(App PROPERTIES
     COMPILE_WARNING_AS_ERROR ON
 )
 target_compile_options(App PRIVATE -Wall -Wextra -pedantic)
+
+# Configure GLFW to use Wayland and disable X11
+set(GLFW_BUILD_WAYLAND ON CACHE BOOL "" FORCE)
+set(GLFW_BUILD_X11 OFF CACHE BOOL "" FORCE)
+
 
 # Add dependencies
 add_subdirectory(lib/webgpu)
