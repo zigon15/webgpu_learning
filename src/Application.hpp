@@ -25,6 +25,7 @@ private:
   void _InitializePipeline();
   wgpu::RequiredLimits _GetRequiredLimits(wgpu::Adapter adapter) const;
   void _InitializeBuffers();
+  void _InitializeBindGroups();
 
 private:
   GLFWwindow *window;
@@ -37,6 +38,10 @@ private:
   wgpu::Buffer pointBuffer;
   wgpu::Buffer indexBuffer;
   uint32_t indexCount;
+  wgpu::Buffer uniformBuffer;
+  wgpu::BindGroup bindGroup;
+  wgpu::PipelineLayout layout;
+  wgpu::BindGroupLayout bindGroupLayout;
 };
 
 #endif
