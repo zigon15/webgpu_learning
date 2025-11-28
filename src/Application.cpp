@@ -2,6 +2,7 @@
 #define WEBGPU_CPP_IMPLEMENTATION
 
 #include "Application.hpp"
+#include "ResourceManager.hpp"
 #include <cassert>
 #include <glfw3webgpu.h>
 #include <iostream>
@@ -13,44 +14,7 @@ using namespace wgpu;
 
 // We embbed the source of the shader module here
 const char *shaderSource = R"(
-/**
- * A structure with fields labeled with vertex attribute locations can be used
- * as input to the entry point of a shader.
- */
-struct VertexInput {
-  @location(0) position: vec2f,
-  @location(1) color: vec3f,
-};
 
-/**
- * A structure with fields labeled with builtins and locations can also be used
- * as *output* of the vertex shader, which is also the input of the fragment
- * shader.
- */
-struct VertexOutput {
-    @builtin(position) position: vec4f,
-    // The location here does not refer to a vertex attribute, it just means
-    // that this field must be handled by the rasterizer.
-    // (It can also refer to another field of another struct that would be used
-    // as input to the fragment shader.)
-    @location(0) color: vec3f,
-};
-
-@vertex
-fn vs_main(in: VertexInput) -> VertexOutput {
-	//                         ^^^^^^^^^^^^ We return a custom struct
-	var out: VertexOutput; // create the output struct
-	let ratio = 640.0 / 480.0; // The width and height of the target surface
-	out.position = vec4f(in.position.x, in.position.y * ratio, 0.0, 1.0);
-	out.color = in.color; // forward the color attribute to the fragment shader
-	return out;
-}
-
-@fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-	//     ^^^^^^^^^^^^^^^^ Use for instance the same struct as what the vertex outputs
-	return vec4f(in.color, 1.0); // use the interpolated color coming from the vertex shader
-}
 )";
 
 //----- Class Functions -----//
@@ -249,16 +213,16 @@ void Application::_InitializePipeline() {
   // shaderDesc.hintCount = 0;
   // shaderDesc.hints = nullptr;
 
-  // We use the extension mechanism to specify the WGSL part of the shader
-  // module descriptor
-  ShaderModuleWGSLDescriptor shaderCodeDesc;
-  // Set the chained struct's header
-  shaderCodeDesc.chain.next = nullptr;
-  shaderCodeDesc.chain.sType = SType::ShaderModuleWGSLDescriptor;
-  // Connect the chain
-  shaderDesc.nextInChain = &shaderCodeDesc.chain;
-  shaderCodeDesc.code = shaderSource;
-  ShaderModule shaderModule = device.createShaderModule(shaderDesc);
+  std::cout << "Creating shader module..." << std::endl;
+  ShaderModule shaderModule =
+      ResourceManager::loadShaderModule(RESOURCE_DIR "/shader.wgsl", device);
+  std::cout << "Shader module: " << shaderModule << std::endl;
+
+  // Check for errors
+  if (shaderModule == nullptr) {
+    std::cerr << "Could not load shader!" << std::endl;
+    exit(1);
+  }
 
   // Create the render pipeline
   RenderPipelineDescriptor pipelineDesc;
@@ -396,23 +360,22 @@ RequiredLimits Application::_GetRequiredLimits(wgpu::Adapter adapter) const {
 }
 
 void Application::_InitializeBuffers() {
-  // Define point data
-  // The de-duplicated list of point positions
-  std::vector<float> pointData = {
-      // x,   y,     r,   g,   b
-      -0.5, -0.5, 1.0, 0.0, 0.0, // Point #0
-      +0.5, -0.5, 0.0, 1.0, 0.0, // Point #1
-      +0.5, +0.5, 0.0, 0.0, 1.0, // Point #2
-      -0.5, +0.5, 1.0, 1.0, 0.0  // Point #3
-  };
+  // 1. Load from disk into CPU-side vectors pointData and indexData
+  // Define data vectors, but without filling them in
+  std::vector<float> pointData;
+  std::vector<uint16_t> indexData;
 
-  // Define index data
-  // This is a list of indices referencing positions in the pointData
-  std::vector<uint16_t> indexData = {
-      0, 1, 2, // Triangle #0 connects points #0, #1 and #2
-      0, 2, 3  // Triangle #1 connects points #0, #2 and #3
-  };
+  // Here we use the new 'loadGeometry' function:
+  bool success = ResourceManager::loadGeometry(RESOURCE_DIR "/webgpu.txt",
+                                               pointData, indexData);
 
+  // Check for errors
+  if (!success) {
+    std::cerr << "Could not load geometry!" << std::endl;
+    exit(1);
+  }
+
+  // We now store the index count rather than the vertex count
   indexCount = static_cast<uint32_t>(indexData.size());
 
   // Create vertex buffer
