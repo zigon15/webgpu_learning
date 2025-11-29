@@ -21,11 +21,25 @@ public:
   bool IsRunning();
 
 private:
+  /**
+   * The same structure as in the shader, replicated in C++
+   * https://eliemichel.github.io/WebGPU-AutoLayout/
+   */
+  struct MyUniforms {
+    // vec4 must be 16 byte aligned!!
+    std::array<float, 4> color;
+    float time;
+    float _pad[3];
+  };
+  // Have the compiler check byte alignment
+  static_assert(sizeof(MyUniforms) % 16 == 0);
+
   std::pair<wgpu::SurfaceTexture, wgpu::TextureView> _GetNextSurfaceViewData();
   void _InitializePipeline();
   wgpu::RequiredLimits _GetRequiredLimits(wgpu::Adapter adapter) const;
   void _InitializeBuffers();
   void _InitializeBindGroups();
+  uint32_t _ceilToNextMultiple(uint32_t value, uint32_t step);
 
 private:
   GLFWwindow *window;
@@ -42,6 +56,8 @@ private:
   wgpu::BindGroup bindGroup;
   wgpu::PipelineLayout layout;
   wgpu::BindGroupLayout bindGroupLayout;
+  wgpu::Limits deviceLimits;
+  uint32_t uniformStride;
 };
 
 #endif

@@ -3,6 +3,7 @@
 
 #include "Application.hpp"
 #include "ResourceManager.hpp"
+#include <array>
 #include <cassert>
 #include <glfw3webgpu.h>
 #include <iostream>
@@ -11,11 +12,6 @@
 
 // Avoid the "wgpu::" prefix in front of all WebGPU symbols
 using namespace wgpu;
-
-// We embbed the source of the shader module here
-const char *shaderSource = R"(
-
-)";
 
 //----- Class Functions -----//
 bool Application::Initialize() {
@@ -57,6 +53,10 @@ bool Application::Initialize() {
   deviceDesc.requiredLimits = &requiredLimits;
   device = adapter.requestDevice(deviceDesc);
   std::cout << "Got device: " << device << std::endl;
+  // Get device limits
+  SupportedLimits deviceSupportedLimits;
+  device.getLimits(&deviceSupportedLimits);
+  deviceLimits = deviceSupportedLimits.limits;
 
   uncapturedErrorCallbackHandle = device.setUncapturedErrorCallback(
       [](ErrorType type, char const *message) {
@@ -115,11 +115,13 @@ void Application::Terminate() {
 }
 
 void Application::MainLoop() {
-  // Update uniform buffer
-  float t = static_cast<float>(glfwGetTime()); // glfwGetTime returns a double
-  queue.writeBuffer(uniformBuffer, 0, &t, sizeof(float));
-
   glfwPollEvents();
+
+  // Update uniform buffer
+  float time = static_cast<float>(glfwGetTime());
+  // Only update the 1-st float of the buffer
+  queue.writeBuffer(uniformBuffer, offsetof(MyUniforms, time), &time,
+                    sizeof(float));
 
   // Get the next target texture view
   auto [surfaceTexture, targetView] = _GetNextSurfaceViewData();
@@ -164,8 +166,17 @@ void Application::MainLoop() {
   renderPass.setIndexBuffer(indexBuffer, IndexFormat::Uint16, 0,
                             indexBuffer.getSize());
 
-  // Set binding group here!
-  renderPass.setBindGroup(0, bindGroup, 0, nullptr);
+  uint32_t dynamicOffset = 0;
+
+  // Set binding group
+  dynamicOffset = 0 * uniformStride;
+  renderPass.setBindGroup(0, bindGroup, 1, &dynamicOffset);
+  renderPass.drawIndexed(indexCount, 1, 0, 0, 0);
+
+  // Set binding group with a different uniform offset
+  dynamicOffset = 1 * uniformStride;
+  renderPass.setBindGroup(0, bindGroup, 1, &dynamicOffset);
+  renderPass.drawIndexed(indexCount, 1, 0, 0, 0);
 
   // Replace `draw()` with `drawIndexed()` and `vertexCount` with `indexCount`
   // The extra argument is an offset within the index buffer.
@@ -335,9 +346,10 @@ void Application::_InitializePipeline() {
   // The binding index as used in the @binding attribute in the shader
   bindingLayout.binding = 0;
   // The stage that needs to access this resource
-  bindingLayout.visibility = ShaderStage::Vertex;
+  bindingLayout.visibility = ShaderStage::Vertex | ShaderStage::Fragment;
   bindingLayout.buffer.type = BufferBindingType::Uniform;
-  bindingLayout.buffer.minBindingSize = 4 * sizeof(float);
+  bindingLayout.buffer.minBindingSize = sizeof(MyUniforms);
+  bindingLayout.buffer.hasDynamicOffset = true;
 
   // Create a bind group layout
   BindGroupLayoutDescriptor bindGroupLayoutDesc{};
@@ -389,6 +401,8 @@ RequiredLimits Application::_GetRequiredLimits(wgpu::Adapter adapter) const {
   // Uniform structs have a size of maximum 16 float (more than what we need)
   requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4;
 
+  requiredLimits.limits.maxDynamicUniformBuffersPerPipelineLayout = 1;
+
   // These two limits are different because they are "minimum" limits,
   // they are the only ones we are may forward from the adapter's supported
   // limits.
@@ -437,22 +451,32 @@ void Application::_InitializeBuffers() {
       (bufferDesc.size + 3) & ~3; // round up to the next multiple of 4
   bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Index;
   indexBuffer = device.createBuffer(bufferDesc);
-
   queue.writeBuffer(indexBuffer, 0, indexData.data(), bufferDesc.size);
 
   // Create uniform buffer (reusing bufferDesc from other buffer creations)
-  // The buffer will only contain 1 float with the value of uTime
-  // then 3 floats left empty but needed by alignment constraints
-  bufferDesc.size = 4 * sizeof(float);
-
-  // Make sure to flag the buffer as BufferUsage::Uniform
+  // Subtility
+  uniformStride = _ceilToNextMultiple(
+      (uint32_t)sizeof(MyUniforms),
+      (uint32_t)deviceLimits.minUniformBufferOffsetAlignment);
+  // The buffer will contain 2 values for the uniforms plus the space in between
+  // (NB: stride = sizeof(MyUniforms) + spacing)
+  bufferDesc.size = uniformStride + sizeof(MyUniforms);
   bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Uniform;
-
   bufferDesc.mappedAtCreation = false;
   uniformBuffer = device.createBuffer(bufferDesc);
 
-  float currentTime = 1.0f;
-  queue.writeBuffer(uniformBuffer, 0, &currentTime, sizeof(float));
+  MyUniforms uniforms;
+  // Upload first value
+  uniforms.time = 1.0f;
+  uniforms.color = {0.0f, 1.0f, 0.4f, 0.5f};
+  queue.writeBuffer(uniformBuffer, 0, &uniforms, sizeof(MyUniforms));
+
+  // Upload second value
+  uniforms.time = -1.0f;
+  uniforms.color = {1.0f, 1.0f, 1.0f, 0.5f};
+  queue.writeBuffer(uniformBuffer, uniformStride, &uniforms,
+                    sizeof(MyUniforms));
+  //                               ^^^^^^^^^^^^^ beware of the non-null offset!
 }
 
 void Application::_InitializeBindGroups() {
@@ -466,7 +490,7 @@ void Application::_InitializeBindGroups() {
   // hold multiple uniform blocks.
   binding.offset = 0;
   // And we specify again the size of the buffer.
-  binding.size = 4 * sizeof(float);
+  binding.size = sizeof(MyUniforms);
 
   // A bind group contains one or multiple bindings
   BindGroupDescriptor bindGroupDesc{};
@@ -475,4 +499,10 @@ void Application::_InitializeBindGroups() {
   bindGroupDesc.entryCount = 1;
   bindGroupDesc.entries = &binding;
   bindGroup = device.createBindGroup(bindGroupDesc);
+}
+
+/** Round 'value' up to the next multiplier of 'step' */
+uint32_t Application::_ceilToNextMultiple(uint32_t value, uint32_t step) {
+  uint32_t divide_and_ceil = value / step + (value % step == 0 ? 0 : 1);
+  return step * divide_and_ceil;
 }
