@@ -5,7 +5,12 @@ project(
     LANGUAGES CXX C 
 )
 
-add_executable(App src/main.cpp src/Application.cpp src/ResourceManager.cpp)
+add_executable(App 
+    src/main.cpp 
+    src/Application.cpp 
+    src/ResourceManager.cpp
+    src/implementations.cpp
+)
 
 set_target_properties(App PROPERTIES
     CXX_STANDARD 23
@@ -32,7 +37,7 @@ target_compile_definitions(App PRIVATE
     RESOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources"
 )
 
-target_include_directories(App PRIVATE . ./lib/tinyObjLoader)
+target_include_directories(App PRIVATE . ./lib/tinyObjLoader ./lib/stbImage)
 
 
 # The application's binary must find wgpu.dll or libwgpu.so at runtime,
