@@ -1,6 +1,7 @@
 #ifndef RESOURCE_MANAGER_HPP
 #define RESOURCE_MANAGER_HPP
 
+#include "Application.hpp"
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -24,5 +25,8 @@ public:
    */
   static wgpu::ShaderModule loadShaderModule(const std::filesystem::path &path,
                                              wgpu::Device device);
+
+  static bool loadGeometryFromObj(const std::filesystem::path &path,
+                                  std::vector<VertexAttributes> &vertexData);
 };
 #endif

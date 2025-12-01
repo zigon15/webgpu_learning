@@ -3,7 +3,7 @@
 int main(int, char **) {
   Application app;
 
-  if (!app.Initialize()) {
+  if (!app.Initialize(640, 480)) {
     return 1;
   }
 

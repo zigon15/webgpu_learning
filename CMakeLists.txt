@@ -32,7 +32,7 @@ target_compile_definitions(App PRIVATE
     RESOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources"
 )
 
-target_include_directories(App PRIVATE .)
+target_include_directories(App PRIVATE . ./lib/tinyObjLoader)
 
 
 # The application's binary must find wgpu.dll or libwgpu.so at runtime,

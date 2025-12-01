@@ -23,13 +23,16 @@ using glm::vec4;
 constexpr float PI = 3.14159265358979323846f;
 
 //----- Class Functions -----//
-bool Application::Initialize() {
+bool Application::Initialize(uint32_t width, uint32_t height) {
+  _width = width;
+  _height = height;
+
   // Move the whole initialization here
   // Open window
   glfwInit();
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
-  window = glfwCreateWindow(640, 480, "Learn WebGPU", nullptr, nullptr);
+  window = glfwCreateWindow(_width, _height, "Learn WebGPU", nullptr, nullptr);
 
   Instance instance = wgpuCreateInstance(nullptr);
   surface = glfwGetWGPUSurface(instance, window);
@@ -81,8 +84,8 @@ bool Application::Initialize() {
   SurfaceConfiguration config = {};
 
   // Configuration of the textures created for the underlying swap chain
-  config.width = 640;
-  config.height = 480;
+  config.width = _width;
+  config.height = _height;
   config.usage = TextureUsage::RenderAttachment;
   surfaceFormat = surface.getPreferredFormat(adapter);
   config.format = surfaceFormat;
@@ -110,7 +113,7 @@ bool Application::Initialize() {
   depthTextureDesc.format = depthTextureFormat;
   depthTextureDesc.mipLevelCount = 1;
   depthTextureDesc.sampleCount = 1;
-  depthTextureDesc.size = {640, 480, 1};
+  depthTextureDesc.size = {_width, _height, 1};
   depthTextureDesc.usage = TextureUsage::RenderAttachment;
   depthTextureDesc.viewFormatCount = 1;
   depthTextureDesc.viewFormats = (WGPUTextureFormat *)&depthTextureFormat;
@@ -137,8 +140,7 @@ void Application::Terminate() {
   layout.release();
   bindGroupLayout.release();
   uniformBuffer.release();
-  pointBuffer.release();
-  indexBuffer.release();
+  vertexBuffer.release();
   pipeline.release();
   surface.unconfigure();
   queue.release();
@@ -222,28 +224,15 @@ void Application::MainLoop() {
   renderPass.setPipeline(pipeline);
 
   // Set vertex buffer while encoding the render pass
-  renderPass.setVertexBuffer(0, pointBuffer, 0, pointBuffer.getSize());
-
-  // The second argument must correspond to the choice of uint16_t or uint32_t
-  // we've done when creating the index buffer.
-  renderPass.setIndexBuffer(indexBuffer, IndexFormat::Uint16, 0,
-                            indexBuffer.getSize());
+  renderPass.setVertexBuffer(0, vertexBuffer, 0,
+                             indexCount * sizeof(VertexAttributes));
 
   uint32_t dynamicOffset = 0;
 
   // Set binding group
   dynamicOffset = 0 * uniformStride;
   renderPass.setBindGroup(0, bindGroup, 1, &dynamicOffset);
-  renderPass.drawIndexed(indexCount, 1, 0, 0, 0);
-
-  // // Set binding group with a different uniform offset
-  // dynamicOffset = 1 * uniformStride;
-  // renderPass.setBindGroup(0, bindGroup, 1, &dynamicOffset);
-  // renderPass.drawIndexed(indexCount, 1, 0, 0, 0);
-
-  // Replace `draw()` with `drawIndexed()` and `vertexCount` with `indexCount`
-  // The extra argument is an offset within the index buffer.
-  renderPass.drawIndexed(indexCount, 1, 0, 0, 0);
+  renderPass.draw(indexCount, 1, 0, 0);
 
   renderPass.end();
   renderPass.release();
@@ -254,10 +243,10 @@ void Application::MainLoop() {
   CommandBuffer command = encoder.finish(cmdBufferDescriptor);
   encoder.release();
 
-  std::cout << "Submitting command..." << std::endl;
+  // std::cout << "Submitting command..." << std::endl;
   queue.submit(1, &command);
   command.release();
-  std::cout << "Command submitted." << std::endl;
+  // std::cout << "Command submitted." << std::endl;
 
   // At the end of the frame
   targetView.release();
@@ -317,23 +306,28 @@ void Application::_InitializePipeline() {
   // We use one vertex buffer
   VertexBufferLayout vertexBufferLayout;
   // We now have 2 attributes
-  std::vector<VertexAttribute> vertexAttribs(2);
+  std::vector<VertexAttribute> vertexAttribs(3);
 
-  // Describe the position attribute
-  vertexAttribs[0].shaderLocation = 0; // @location(0)
+  // Position attribute
+  vertexAttribs[0].shaderLocation = 0;
   vertexAttribs[0].format = VertexFormat::Float32x3;
-  vertexAttribs[0].offset = 0;
+  vertexAttribs[0].offset = offsetof(VertexAttributes, position);
 
-  // Describe the color attribute
-  vertexAttribs[1].shaderLocation = 1;               // @location(1)
-  vertexAttribs[1].format = VertexFormat::Float32x3; // different type!
-  vertexAttribs[1].offset = 3 * sizeof(float);       // non null offset!
+  // Normal attribute
+  vertexAttribs[1].shaderLocation = 1;
+  vertexAttribs[1].format = VertexFormat::Float32x3;
+  vertexAttribs[1].offset = offsetof(VertexAttributes, normal);
+
+  // Color attribute
+  vertexAttribs[2].shaderLocation = 2;
+  vertexAttribs[2].format = VertexFormat::Float32x3;
+  vertexAttribs[2].offset = offsetof(VertexAttributes, color);
 
   vertexBufferLayout.attributeCount =
       static_cast<uint32_t>(vertexAttribs.size());
   vertexBufferLayout.attributes = vertexAttribs.data();
 
-  vertexBufferLayout.arrayStride = 6 * sizeof(float);
+  vertexBufferLayout.arrayStride = sizeof(VertexAttributes);
   vertexBufferLayout.stepMode = VertexStepMode::Vertex;
 
   pipelineDesc.vertex.bufferCount = 1;
@@ -452,19 +446,16 @@ RequiredLimits Application::_GetRequiredLimits(wgpu::Adapter adapter) const {
   RequiredLimits requiredLimits = Default;
 
   // We use at most 2 vertex attributes
-  requiredLimits.limits.maxVertexAttributes = 2;
-  //                                          ^ This was 1
+  requiredLimits.limits.maxVertexAttributes = 3;
   // We should also tell that we use 1 vertex buffers
   requiredLimits.limits.maxVertexBuffers = 1;
   // Maximum size of a buffer is 15 vertices of 5 float each
-  requiredLimits.limits.maxBufferSize = 15 * 5 * sizeof(float);
-  //                                        ^ This was a 2
+  requiredLimits.limits.maxBufferSize = 10000 * sizeof(VertexAttributes);
   // Maximum stride between 2 consecutive vertices in the vertex buffer
-  requiredLimits.limits.maxVertexBufferArrayStride = 6 * sizeof(float);
-  //                                                 ^ This was a 2
+  requiredLimits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
 
   // There is a maximum of 3 float forwarded from vertex to fragment shader
-  requiredLimits.limits.maxInterStageShaderComponents = 3;
+  requiredLimits.limits.maxInterStageShaderComponents = 6;
 
   // We use at most 1 bind group for now
   requiredLimits.limits.maxBindGroups = 1;
@@ -487,14 +478,13 @@ RequiredLimits Application::_GetRequiredLimits(wgpu::Adapter adapter) const {
 }
 
 void Application::_InitializeBuffers() {
-  // 1. Load from disk into CPU-side vectors pointData and indexData
+  // 1. Load from disk into CPU-side vectors vertexData and indexData
   // Define data vectors, but without filling them in
-  std::vector<float> pointData;
-  std::vector<uint16_t> indexData;
+  std::vector<VertexAttributes> vertexData;
 
   // Here we use the new 'loadGeometry' function:
-  bool success = ResourceManager::loadGeometry(RESOURCE_DIR "/pyramid.txt",
-                                               pointData, indexData, 3);
+  bool success = ResourceManager::loadGeometryFromObj(
+      RESOURCE_DIR "/mammoth.obj", vertexData);
 
   // Check for errors
   if (!success) {
@@ -502,28 +492,17 @@ void Application::_InitializeBuffers() {
     exit(1);
   }
 
-  // We now store the index count rather than the vertex count
-  indexCount = static_cast<uint32_t>(indexData.size());
-
   // Create vertex buffer
   BufferDescriptor bufferDesc;
-  bufferDesc.size = pointData.size() * sizeof(float);
+  bufferDesc.size = vertexData.size() * sizeof(VertexAttributes);
   bufferDesc.usage =
       BufferUsage::CopyDst | BufferUsage::Vertex; // Vertex usage here!
   bufferDesc.mappedAtCreation = false;
-  pointBuffer = device.createBuffer(bufferDesc);
+  vertexBuffer = device.createBuffer(bufferDesc);
+  indexCount = static_cast<int>(vertexData.size());
 
   // Upload geometry data to the buffer
-  queue.writeBuffer(pointBuffer, 0, pointData.data(), bufferDesc.size);
-
-  // Create index buffer
-  // (we reuse the bufferDesc initialized for the pointBuffer)
-  bufferDesc.size = indexData.size() * sizeof(uint16_t);
-  bufferDesc.size =
-      (bufferDesc.size + 3) & ~3; // round up to the next multiple of 4
-  bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Index;
-  indexBuffer = device.createBuffer(bufferDesc);
-  queue.writeBuffer(indexBuffer, 0, indexData.data(), bufferDesc.size);
+  queue.writeBuffer(vertexBuffer, 0, vertexData.data(), bufferDesc.size);
 
   // Create uniform buffer (reusing bufferDesc from other buffer creations)
   // Subtility
@@ -541,7 +520,7 @@ void Application::_InitializeBuffers() {
   float angle1 = 2.0f;
   // Rotate the view point
   float angle2 = 3.0f * PI / 4.0f;
-  float ratio = 640.0f / 480.0f;
+  float ratio = static_cast<float>(_width) / _height;
   float focalLength = 2.0;
   float near = 0.01f;
   float far = 100.0f;

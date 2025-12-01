@@ -11,10 +11,20 @@
 #include <utility>
 #include <webgpu/webgpu.hpp>
 
+/**
+ * A structure that describes the data layout in the vertex buffer
+ * We do not instantiate it but use it in `sizeof` and `offsetof`
+ */
+struct VertexAttributes {
+  glm::vec3 position;
+  glm::vec3 normal;
+  glm::vec3 color;
+};
+
 class Application {
 public:
   // Initialize everything and return true if it went all right
-  bool Initialize();
+  bool Initialize(uint32_t width, uint32_t height);
 
   // Uninitialize everything that was initialized
   void Terminate();
@@ -39,6 +49,7 @@ private:
     float time;
     float _pad[3];
   };
+
   // Have the compiler check byte alignment
   static_assert(sizeof(MyUniforms) % 16 == 0);
 
@@ -50,6 +61,9 @@ private:
   uint32_t _ceilToNextMultiple(uint32_t value, uint32_t step);
 
 private:
+  uint32_t _width;
+  uint32_t _height;
+
   GLFWwindow *window;
   wgpu::Device device;
   wgpu::Queue queue;
@@ -57,8 +71,7 @@ private:
   std::unique_ptr<wgpu::ErrorCallback> uncapturedErrorCallbackHandle;
   wgpu::TextureFormat surfaceFormat = wgpu::TextureFormat::Undefined;
   wgpu::RenderPipeline pipeline;
-  wgpu::Buffer pointBuffer;
-  wgpu::Buffer indexBuffer;
+  wgpu::Buffer vertexBuffer;
   uint32_t indexCount;
   wgpu::Buffer uniformBuffer;
   wgpu::BindGroup bindGroup;
