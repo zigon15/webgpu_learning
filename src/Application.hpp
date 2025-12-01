@@ -2,7 +2,12 @@
 #define APPLICATION_HPP
 
 // #define WEBGPU_CPP_IMPLEMENTATION
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_FORCE_LEFT_HANDED
+
 #include <GLFW/glfw3.h>
+#include <glm/ext.hpp>
+#include <glm/glm.hpp>
 #include <utility>
 #include <webgpu/webgpu.hpp>
 
@@ -26,7 +31,10 @@ private:
    * https://eliemichel.github.io/WebGPU-AutoLayout/
    */
   struct MyUniforms {
-    // vec4 must be 16 byte aligned!!
+    // We add transform matrices
+    glm::mat4x4 projectionMatrix;
+    glm::mat4x4 viewMatrix;
+    glm::mat4x4 modelMatrix;
     std::array<float, 4> color;
     float time;
     float _pad[3];
@@ -60,6 +68,7 @@ private:
   uint32_t uniformStride;
   wgpu::Texture depthTexture;
   wgpu::TextureView depthTextureView;
+  MyUniforms uniforms;
 };
 
 #endif

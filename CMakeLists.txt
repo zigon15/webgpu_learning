@@ -22,6 +22,7 @@ set(GLFW_BUILD_X11 OFF CACHE BOOL "" FORCE)
 # Add dependencies
 add_subdirectory(lib/webgpu)
 add_subdirectory(lib/glfw3webgpu)
+add_subdirectory(lib/glm)
 target_link_libraries(App PRIVATE webgpu glfw glfw3webgpu)
 
 # In dev mode, we load resources from the source tree, so that when we
@@ -30,6 +31,8 @@ target_link_libraries(App PRIVATE webgpu glfw glfw3webgpu)
 target_compile_definitions(App PRIVATE
     RESOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources"
 )
+
+target_include_directories(App PRIVATE .)
 
 
 # The application's binary must find wgpu.dll or libwgpu.so at runtime,

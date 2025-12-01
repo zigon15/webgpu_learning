@@ -1,17 +1,26 @@
 
 #define WEBGPU_CPP_IMPLEMENTATION
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_FORCE_LEFT_HANDED
 
 #include "Application.hpp"
 #include "ResourceManager.hpp"
 #include <array>
 #include <cassert>
 #include <glfw3webgpu.h>
+#include <glm/ext.hpp>
+#include <glm/glm.hpp>
 #include <iostream>
 #include <vector>
 #include <webgpu/webgpu.hpp>
 
 // Avoid the "wgpu::" prefix in front of all WebGPU symbols
 using namespace wgpu;
+using glm::mat4x4;
+using glm::vec3;
+using glm::vec4;
+
+constexpr float PI = 3.14159265358979323846f;
 
 //----- Class Functions -----//
 bool Application::Initialize() {
@@ -144,10 +153,20 @@ void Application::MainLoop() {
   glfwPollEvents();
 
   // Update uniform buffer
-  float time = static_cast<float>(glfwGetTime());
+  uniforms.time =
+      static_cast<float>(glfwGetTime()); // glfwGetTime returns a double
   // Only update the 1-st float of the buffer
-  queue.writeBuffer(uniformBuffer, offsetof(MyUniforms, time), &time,
-                    sizeof(float));
+  queue.writeBuffer(uniformBuffer, offsetof(MyUniforms, time), &uniforms.time,
+                    sizeof(MyUniforms::time));
+
+  // Update view matrix
+  float angle1 = uniforms.time;
+  mat4x4 S = glm::scale(mat4x4(1.0), vec3(0.3f));
+  mat4x4 T1 = glm::translate(mat4x4(1.0), vec3(0.5, 0.0, 0.0));
+  mat4x4 R1 = glm::rotate(mat4x4(1.0), angle1, vec3(0.0, 0.0, 1.0));
+  uniforms.modelMatrix = R1 * T1 * S;
+  queue.writeBuffer(uniformBuffer, offsetof(MyUniforms, modelMatrix),
+                    &uniforms.modelMatrix, sizeof(MyUniforms::modelMatrix));
 
   // Get the next target texture view
   auto [surfaceTexture, targetView] = _GetNextSurfaceViewData();
@@ -452,7 +471,7 @@ RequiredLimits Application::_GetRequiredLimits(wgpu::Adapter adapter) const {
   // We use at most 1 uniform buffer per stage
   requiredLimits.limits.maxUniformBuffersPerShaderStage = 1;
   // Uniform structs have a size of maximum 16 float (more than what we need)
-  requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4;
+  requiredLimits.limits.maxUniformBufferBindingSize = 16 * 4 * sizeof(float);
 
   requiredLimits.limits.maxDynamicUniformBuffersPerPipelineLayout = 1;
 
@@ -518,8 +537,31 @@ void Application::_InitializeBuffers() {
   bufferDesc.mappedAtCreation = false;
   uniformBuffer = device.createBuffer(bufferDesc);
 
-  MyUniforms uniforms;
-  // Upload first value
+  // Arbitrary time
+  float angle1 = 2.0f;
+  // Rotate the view point
+  float angle2 = 3.0f * PI / 4.0f;
+  float ratio = 640.0f / 480.0f;
+  float focalLength = 2.0;
+  float near = 0.01f;
+  float far = 100.0f;
+  vec3 focalPoint(0.0, 0.0, -2.0);
+
+  // Option C: A different way of using GLM extensions
+  mat4x4 M(1.0);
+  M = glm::rotate(M, angle1, vec3(0.0, 0.0, 1.0));
+  M = glm::translate(M, vec3(0.5, 0.0, 0.0));
+  M = glm::scale(M, vec3(0.3f));
+  uniforms.modelMatrix = M;
+
+  mat4x4 V(1.0);
+  V = glm::translate(V, -focalPoint);
+  V = glm::rotate(V, -angle2, vec3(1.0, 0.0, 0.0));
+  uniforms.viewMatrix = V;
+
+  float fov = 2 * glm::atan(1 / focalLength);
+  uniforms.projectionMatrix = glm::perspective(fov, ratio, near, far);
+
   uniforms.time = 1.0f;
   uniforms.color = {0.0f, 1.0f, 0.4f, 1.0f};
   queue.writeBuffer(uniformBuffer, 0, &uniforms, sizeof(MyUniforms));
