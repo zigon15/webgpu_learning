@@ -58,6 +58,8 @@ private:
   wgpu::BindGroupLayout bindGroupLayout;
   wgpu::Limits deviceLimits;
   uint32_t uniformStride;
+  wgpu::Texture depthTexture;
+  wgpu::TextureView depthTextureView;
 };
 
 #endif

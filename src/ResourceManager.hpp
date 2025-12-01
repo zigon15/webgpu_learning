@@ -16,7 +16,7 @@ public:
    */
   static bool loadGeometry(const std::filesystem::path &path,
                            std::vector<float> &pointData,
-                           std::vector<uint16_t> &indexData);
+                           std::vector<uint16_t> &indexData, int dimensions);
 
   /**
    * Create a shader module for a given WebGPU `device` from a WGSL shader

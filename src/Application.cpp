@@ -94,6 +94,32 @@ bool Application::Initialize() {
   _InitializeBuffers();
   _InitializeBindGroups();
 
+  // Create the depth texture
+  TextureFormat depthTextureFormat = TextureFormat::Depth24Plus;
+  TextureDescriptor depthTextureDesc;
+  depthTextureDesc.dimension = TextureDimension::_2D;
+  depthTextureDesc.format = depthTextureFormat;
+  depthTextureDesc.mipLevelCount = 1;
+  depthTextureDesc.sampleCount = 1;
+  depthTextureDesc.size = {640, 480, 1};
+  depthTextureDesc.usage = TextureUsage::RenderAttachment;
+  depthTextureDesc.viewFormatCount = 1;
+  depthTextureDesc.viewFormats = (WGPUTextureFormat *)&depthTextureFormat;
+  depthTexture = device.createTexture(depthTextureDesc);
+  std::cout << "Depth texture: " << depthTexture << std::endl;
+
+  // Create the view of the depth texture manipulated by the rasterizer
+  TextureViewDescriptor depthTextureViewDesc;
+  depthTextureViewDesc.aspect = TextureAspect::DepthOnly;
+  depthTextureViewDesc.baseArrayLayer = 0;
+  depthTextureViewDesc.arrayLayerCount = 1;
+  depthTextureViewDesc.baseMipLevel = 0;
+  depthTextureViewDesc.mipLevelCount = 1;
+  depthTextureViewDesc.dimension = TextureViewDimension::_2D;
+  depthTextureViewDesc.format = depthTextureFormat;
+  depthTextureView = depthTexture.createView(depthTextureViewDesc);
+  std::cout << "Depth texture view: " << depthTextureView << std::endl;
+
   return true;
 }
 
@@ -148,7 +174,25 @@ void Application::MainLoop() {
 
   renderPassDesc.colorAttachmentCount = 1;
   renderPassDesc.colorAttachments = &renderPassColorAttachment;
-  renderPassDesc.depthStencilAttachment = nullptr;
+
+  // We now add a depth/stencil attachment:
+  RenderPassDepthStencilAttachment depthStencilAttachment;
+  // The view of the depth texture
+  depthStencilAttachment.view = depthTextureView;
+  // The initial value of the depth buffer, meaning "far"
+  depthStencilAttachment.depthClearValue = 1.0f;
+  // Operation settings comparable to the color attachment
+  depthStencilAttachment.depthLoadOp = LoadOp::Clear;
+  depthStencilAttachment.depthStoreOp = StoreOp::Store;
+  // we could turn off writing to the depth buffer globally here
+  depthStencilAttachment.depthReadOnly = false;
+  // Stencil setup, mandatory but unused
+  depthStencilAttachment.stencilClearValue = 0;
+  depthStencilAttachment.stencilLoadOp = LoadOp::Undefined;
+  depthStencilAttachment.stencilStoreOp = StoreOp::Undefined;
+  depthStencilAttachment.stencilReadOnly = true;
+  renderPassDesc.depthStencilAttachment = &depthStencilAttachment;
+
   renderPassDesc.timestampWrites = nullptr;
 
   // Create the render pass and end it immediately (we only clear the screen but
@@ -173,10 +217,10 @@ void Application::MainLoop() {
   renderPass.setBindGroup(0, bindGroup, 1, &dynamicOffset);
   renderPass.drawIndexed(indexCount, 1, 0, 0, 0);
 
-  // Set binding group with a different uniform offset
-  dynamicOffset = 1 * uniformStride;
-  renderPass.setBindGroup(0, bindGroup, 1, &dynamicOffset);
-  renderPass.drawIndexed(indexCount, 1, 0, 0, 0);
+  // // Set binding group with a different uniform offset
+  // dynamicOffset = 1 * uniformStride;
+  // renderPass.setBindGroup(0, bindGroup, 1, &dynamicOffset);
+  // renderPass.drawIndexed(indexCount, 1, 0, 0, 0);
 
   // Replace `draw()` with `drawIndexed()` and `vertexCount` with `indexCount`
   // The extra argument is an offset within the index buffer.
@@ -258,19 +302,19 @@ void Application::_InitializePipeline() {
 
   // Describe the position attribute
   vertexAttribs[0].shaderLocation = 0; // @location(0)
-  vertexAttribs[0].format = VertexFormat::Float32x2;
+  vertexAttribs[0].format = VertexFormat::Float32x3;
   vertexAttribs[0].offset = 0;
 
   // Describe the color attribute
   vertexAttribs[1].shaderLocation = 1;               // @location(1)
   vertexAttribs[1].format = VertexFormat::Float32x3; // different type!
-  vertexAttribs[1].offset = 2 * sizeof(float);       // non null offset!
+  vertexAttribs[1].offset = 3 * sizeof(float);       // non null offset!
 
   vertexBufferLayout.attributeCount =
       static_cast<uint32_t>(vertexAttribs.size());
   vertexBufferLayout.attributes = vertexAttribs.data();
 
-  vertexBufferLayout.arrayStride = 5 * sizeof(float);
+  vertexBufferLayout.arrayStride = 6 * sizeof(float);
   vertexBufferLayout.stepMode = VertexStepMode::Vertex;
 
   pipelineDesc.vertex.bufferCount = 1;
@@ -329,8 +373,17 @@ void Application::_InitializePipeline() {
   fragmentState.targets = &colorTarget;
   pipelineDesc.fragment = &fragmentState;
 
-  // We do not use stencil/depth testing for now
-  pipelineDesc.depthStencil = nullptr;
+  DepthStencilState depthStencilState = Default;
+  depthStencilState.depthCompare = CompareFunction::Less;
+  depthStencilState.depthWriteEnabled = true;
+  // Store the format in a variable as later parts of the code depend on it
+  TextureFormat depthTextureFormat = TextureFormat::Depth24Plus;
+  depthStencilState.format = depthTextureFormat;
+  // Deactivate the stencil alltogether
+  depthStencilState.stencilReadMask = 0;
+  depthStencilState.stencilWriteMask = 0;
+  // Setup depth state
+  pipelineDesc.depthStencil = &depthStencilState;
 
   // Samples per pixel
   pipelineDesc.multisample.count = 1;
@@ -388,7 +441,7 @@ RequiredLimits Application::_GetRequiredLimits(wgpu::Adapter adapter) const {
   requiredLimits.limits.maxBufferSize = 15 * 5 * sizeof(float);
   //                                        ^ This was a 2
   // Maximum stride between 2 consecutive vertices in the vertex buffer
-  requiredLimits.limits.maxVertexBufferArrayStride = 5 * sizeof(float);
+  requiredLimits.limits.maxVertexBufferArrayStride = 6 * sizeof(float);
   //                                                 ^ This was a 2
 
   // There is a maximum of 3 float forwarded from vertex to fragment shader
@@ -421,8 +474,8 @@ void Application::_InitializeBuffers() {
   std::vector<uint16_t> indexData;
 
   // Here we use the new 'loadGeometry' function:
-  bool success = ResourceManager::loadGeometry(RESOURCE_DIR "/webgpu.txt",
-                                               pointData, indexData);
+  bool success = ResourceManager::loadGeometry(RESOURCE_DIR "/pyramid.txt",
+                                               pointData, indexData, 3);
 
   // Check for errors
   if (!success) {
@@ -472,10 +525,10 @@ void Application::_InitializeBuffers() {
   queue.writeBuffer(uniformBuffer, 0, &uniforms, sizeof(MyUniforms));
 
   // Upload second value
-  uniforms.time = -1.0f;
-  uniforms.color = {1.0f, 1.0f, 1.0f, 0.5f};
-  queue.writeBuffer(uniformBuffer, uniformStride, &uniforms,
-                    sizeof(MyUniforms));
+  // uniforms.time = -1.0f;
+  // uniforms.color = {1.0f, 1.0f, 1.0f, 0.5f};
+  // queue.writeBuffer(uniformBuffer, uniformStride, &uniforms,
+  //                   sizeof(MyUniforms));
   //                               ^^^^^^^^^^^^^ beware of the non-null offset!
 }
 
