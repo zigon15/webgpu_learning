@@ -521,7 +521,7 @@ void Application::_InitializeBuffers() {
   MyUniforms uniforms;
   // Upload first value
   uniforms.time = 1.0f;
-  uniforms.color = {0.0f, 1.0f, 0.4f, 0.5f};
+  uniforms.color = {0.0f, 1.0f, 0.4f, 1.0f};
   queue.writeBuffer(uniformBuffer, 0, &uniforms, sizeof(MyUniforms));
 
   // Upload second value
