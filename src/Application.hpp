@@ -63,6 +63,9 @@ private:
   bool initRenderPipeline();
   void terminateRenderPipeline();
 
+  bool initBindGroupLayout();
+  void terminateBindGroupLayout();
+
   bool initTexture();
   void terminateTexture();
 
@@ -89,6 +92,10 @@ private:
   void terminateGui();                                // called in onFinish
   void updateGui(wgpu::RenderPassEncoder renderPass); // called in onFrame
 
+  bool initLightingUniforms();      // called in onInit()
+  void terminateLightingUniforms(); // called in onFinish()
+  void updateLightingUniforms();    // called when GUI is tweaked
+
 private:
   // (Just aliases to make notations lighter)
   using mat4x4 = glm::mat4x4;
@@ -110,6 +117,13 @@ private:
   };
   // Have the compiler check byte alignment
   static_assert(sizeof(MyUniforms) % 16 == 0);
+
+  // Before Application's private attributes
+  struct LightingUniforms {
+    std::array<vec4, 2> directions;
+    std::array<vec4, 2> colors;
+  };
+  static_assert(sizeof(LightingUniforms) % 16 == 0);
 
   struct CameraState {
     // angles.x is the rotation of the camera around the global vertical axis,
@@ -176,9 +190,14 @@ private:
   wgpu::Buffer m_uniformBuffer = nullptr;
   MyUniforms m_uniforms;
 
+  wgpu::Buffer m_lightingUniformBuffer = nullptr;
+  LightingUniforms m_lightingUniforms;
+
   // Bind Group
   wgpu::BindGroup m_bindGroup = nullptr;
 
   CameraState m_cameraState;
   DragState m_drag;
+
+  bool m_lightingUniformsChanged = false;
 };

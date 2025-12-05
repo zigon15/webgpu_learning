@@ -23,9 +23,18 @@ struct MyUniforms {
     time: f32,
 };
 
+/**
+ * A structure holding the lighting settings
+ */
+struct LightingUniforms {
+    directions: array<vec4f, 2>,
+    colors: array<vec4f, 2>,
+}
+
 @group(0) @binding(0) var<uniform> uMyUniforms: MyUniforms;
-@group(0) @binding(1) var gradientTexture: texture_2d<f32>;
+@group(0) @binding(1) var baseColorTexture: texture_2d<f32>;
 @group(0) @binding(2) var textureSampler: sampler;
+@group(0) @binding(3) var<uniform> uLighting: LightingUniforms;
 
 @vertex
 fn vs_main(in: VertexInput) -> VertexOutput {
@@ -39,10 +48,27 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4f {
-	// Get data from the texture using our new sampler
-    let color = textureSample(gradientTexture, textureSampler, in.uv).rgb;
+// Compute shading
+    let normal = normalize(in.normal);
+    var shading = vec3f(0.0);
+    for (var i: i32 = 0; i < 2; i++) {
+        let direction = normalize(uLighting.directions[i].xyz);
+        let color = uLighting.colors[i].rgb;
+        shading += max(0.0, dot(direction, normal)) * color;
 
-	// Gamma-correction
+                // Within the loop over light sources in the fragment shader
+        let diffuse = max(0.0, dot(direction, normal)) * color; // our model so far
+        let specular = vec3f(0.0); // to be done
+        shading += diffuse + specular;
+    }
+    
+    // Sample texture
+    let baseColor = textureSample(baseColorTexture, textureSampler, in.uv).rgb;
+
+    // Combine texture and lighting
+    let color = baseColor * shading;
+
+    // Gamma-correction
     let corrected_color = pow(color, vec3f(2.2));
     return vec4f(corrected_color, uMyUniforms.color.a);
 }
