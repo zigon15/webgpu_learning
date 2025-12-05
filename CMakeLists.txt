@@ -28,7 +28,8 @@ set(GLFW_BUILD_X11 OFF CACHE BOOL "" FORCE)
 add_subdirectory(lib/webgpu)
 add_subdirectory(lib/glfw3webgpu)
 add_subdirectory(lib/glm)
-target_link_libraries(App PRIVATE webgpu glfw glfw3webgpu)
+add_subdirectory(lib/imgui)
+target_link_libraries(App PRIVATE webgpu glfw glfw3webgpu imgui)
 
 # In dev mode, we load resources from the source tree, so that when we
 # dynamically edit resources (like shaders), these are correctly
@@ -37,7 +38,7 @@ target_compile_definitions(App PRIVATE
     RESOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources"
 )
 
-target_include_directories(App PRIVATE . ./lib/tinyObjLoader ./lib/stbImage)
+target_include_directories(App PRIVATE . ./lib/tinyObjLoader ./lib/stbImage ./lib/imgui)
 
 
 # The application's binary must find wgpu.dll or libwgpu.so at runtime,
