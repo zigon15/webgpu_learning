@@ -758,6 +758,47 @@ void Application::terminateGui() {
   ImGui_ImplWGPU_Shutdown();
 }
 
+void DrawRightSidebar() {
+  // 1. Setup dimensions
+  float width = 100.0f;
+
+  // 2. Get the main viewport (the full OS window or screen)
+  const ImGuiViewport *viewport = ImGui::GetMainViewport();
+
+  // 3. Calculate Position
+  // X = Start of work area + Total width - Panel width
+  // Y = Start of work area (accounts for top menu bars)
+  ImVec2 work_pos =
+      viewport->WorkPos; // Use WorkPos to avoid covering menu bars
+  ImVec2 work_size = viewport->WorkSize;
+
+  ImVec2 pos = ImVec2(0, work_pos.y);
+  ImVec2 size = ImVec2(width, work_size.y);
+
+  // 4. Force Position and Size
+  // ImGuiCond_Always ensures it snaps back if the user tries to move it
+  ImGui::SetNextWindowPos(pos, ImGuiCond_Always);
+  ImGui::SetNextWindowSize(size, ImGuiCond_Always);
+
+  // 5. Set Window Flags to make it look like a static panel
+  ImGuiWindowFlags window_flags = 0;
+  window_flags |= ImGuiWindowFlags_NoTitleBar; // Remove blue header
+  window_flags |= ImGuiWindowFlags_NoResize;   // User can't change size
+  window_flags |= ImGuiWindowFlags_NoMove;     // User can't drag it
+  window_flags |= ImGuiWindowFlags_NoCollapse; // User can't minimize it
+  window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus; // Optional: keeps it
+                                                          // in background layer
+
+  // 6. Draw
+  ImGui::Begin("RightStickyPanel", nullptr, window_flags);
+
+  ImGui::Text("I am");
+  ImGui::Text("Stuck!");
+  ImGui::Button("Action", ImVec2(-1, 0)); // Button spans full width
+
+  ImGui::End();
+}
+
 void Application::updateGui(RenderPassEncoder renderPass) {
   // Start the Dear ImGui frame
   ImGui_ImplWGPU_NewFrame();
@@ -766,6 +807,8 @@ void Application::updateGui(RenderPassEncoder renderPass) {
 
   // Build our UI
   bool changed = false;
+  ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+
   ImGui::Begin("Lighting");
   changed = ImGui::ColorEdit3("Color #0",
                               glm::value_ptr(m_lightingUniforms.colors[0])) ||
@@ -781,6 +824,8 @@ void Application::updateGui(RenderPassEncoder renderPass) {
       changed;
   ImGui::End();
   m_lightingUniformsChanged = changed;
+
+  DrawRightSidebar();
 
   // Draw the UI
   ImGui::EndFrame();

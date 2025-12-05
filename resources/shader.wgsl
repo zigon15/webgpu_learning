@@ -54,11 +54,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4f {
     for (var i: i32 = 0; i < 2; i++) {
         let direction = normalize(uLighting.directions[i].xyz);
         let color = uLighting.colors[i].rgb;
-        shading += max(0.0, dot(direction, normal)) * color;
-
-                // Within the loop over light sources in the fragment shader
-        let diffuse = max(0.0, dot(direction, normal)) * color; // our model so far
-        let specular = vec3f(0.0); // to be done
+        let diffuse = max(0.0, dot(direction, normal)) * color;
+        let specular = vec3f(0.0);
         shading += diffuse + specular;
     }
     

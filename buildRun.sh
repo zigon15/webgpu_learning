@@ -13,4 +13,5 @@ cp $BUILD_DIR/compile_commands.json ./build/compile_commands.json
 
 # Run
 cd "$BUILD_DIR"
+rm "imgui.ini"
 ./App
