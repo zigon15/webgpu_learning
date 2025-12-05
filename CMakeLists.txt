@@ -8,6 +8,7 @@ project(
 add_executable(App 
     src/main.cpp 
     src/Application.cpp 
+    src/Scene.cpp
     src/ResourceManager.cpp
     src/implementations.cpp
 )

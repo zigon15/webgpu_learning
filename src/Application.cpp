@@ -49,7 +49,7 @@
 using namespace wgpu;
 using VertexAttributes = ResourceManager::VertexAttributes;
 
-constexpr float PI = 3.14159265358979323846f;
+constexpr float SIDEBAR_WIDTH = 100.0f;
 
 namespace ImGui {
 bool DragDirection(const char *label, glm::vec4 &direction) {
@@ -68,37 +68,28 @@ bool Application::onInit() {
     return false;
   if (!initSwapChain())
     return false;
-  if (!initDepthBuffer())
-    return false;
-  if (!initBindGroupLayout())
-    return false;
-  if (!initRenderPipeline())
-    return false;
-  if (!initTexture())
-    return false;
-  if (!initGeometry())
-    return false;
-  if (!initUniforms())
-    return false;
-  if (!initLightingUniforms())
-    return false;
-  if (!initBindGroup())
-    return false;
   if (!initGui())
+    return false;
+
+  m_depthTextureFormat = wgpu::TextureFormat::Depth24Plus;
+
+  if (!m_sceneTop.onInit(m_device, m_queue, m_swapChainFormat,
+                         m_depthTextureFormat, m_width, m_height,
+                         m_width - (int)SIDEBAR_WIDTH, m_height / 2))
+    return false;
+  if (!m_sceneBottom.onInit(m_device, m_queue, m_swapChainFormat,
+                            m_depthTextureFormat, m_width, m_height,
+                            m_width - (int)SIDEBAR_WIDTH, m_height / 2))
     return false;
   return true;
 }
 
 void Application::onFrame() {
-  updateLightingUniforms();
+
   glfwPollEvents();
 
-  updateDragInertia();
-
   // Update uniform buffer
-  m_uniforms.time = static_cast<float>(glfwGetTime());
-  m_queue.writeBuffer(m_uniformBuffer, offsetof(MyUniforms, time),
-                      &m_uniforms.time, sizeof(MyUniforms::time));
+  // Moved to Scene
 
   TextureView nextTexture = m_swapChain.getCurrentTextureView();
   if (!nextTexture) {
@@ -110,55 +101,94 @@ void Application::onFrame() {
   commandEncoderDesc.label = "Command Encoder";
   CommandEncoder encoder = m_device.createCommandEncoder(commandEncoderDesc);
 
-  RenderPassDescriptor renderPassDesc{};
+  // Render Top Scene
+  {
+    RenderPassDescriptor renderPassDesc{};
+    RenderPassColorAttachment renderPassColorAttachment{};
+    renderPassColorAttachment.view = nextTexture;
+    renderPassColorAttachment.resolveTarget = nullptr;
+    renderPassColorAttachment.loadOp = LoadOp::Clear;
+    renderPassColorAttachment.storeOp = StoreOp::Store;
+    renderPassColorAttachment.clearValue = Color{0.05, 0.05, 0.05, 1.0};
+    renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+    renderPassDesc.colorAttachmentCount = 1;
+    renderPassDesc.colorAttachments = &renderPassColorAttachment;
 
-  RenderPassColorAttachment renderPassColorAttachment{};
-  renderPassColorAttachment.view = nextTexture;
-  renderPassColorAttachment.resolveTarget = nullptr;
-  renderPassColorAttachment.loadOp = LoadOp::Clear;
-  renderPassColorAttachment.storeOp = StoreOp::Store;
-  renderPassColorAttachment.clearValue = Color{0.05, 0.05, 0.05, 1.0};
-  renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
-  renderPassDesc.colorAttachmentCount = 1;
-  renderPassDesc.colorAttachments = &renderPassColorAttachment;
+    RenderPassDepthStencilAttachment depthStencilAttachment{};
+    depthStencilAttachment.view = m_sceneTop.getDepthTextureView();
+    if (!depthStencilAttachment.view)
+      std::cerr << "Top Scene Depth View is NULL" << std::endl;
+    depthStencilAttachment.depthClearValue = 1.0f;
+    depthStencilAttachment.depthLoadOp = LoadOp::Clear;
+    depthStencilAttachment.depthStoreOp = StoreOp::Store;
+    depthStencilAttachment.depthReadOnly = false;
+    depthStencilAttachment.stencilClearValue = 0;
+    depthStencilAttachment.stencilLoadOp = LoadOp::Undefined;
+    depthStencilAttachment.stencilStoreOp = StoreOp::Undefined;
+    depthStencilAttachment.stencilReadOnly = true;
 
-  RenderPassDepthStencilAttachment depthStencilAttachment;
-  depthStencilAttachment.view = m_depthTextureView;
-  depthStencilAttachment.depthClearValue = 1.0f;
-  depthStencilAttachment.depthLoadOp = LoadOp::Clear;
-  depthStencilAttachment.depthStoreOp = StoreOp::Store;
-  depthStencilAttachment.depthReadOnly = false;
-  depthStencilAttachment.stencilClearValue = 0;
-#ifdef WEBGPU_BACKEND_WGPU
-  depthStencilAttachment.stencilLoadOp = LoadOp::Clear;
-  depthStencilAttachment.stencilStoreOp = StoreOp::Store;
-#else
-  depthStencilAttachment.stencilLoadOp = LoadOp::Undefined;
-  depthStencilAttachment.stencilStoreOp = StoreOp::Undefined;
-#endif
-  depthStencilAttachment.stencilReadOnly = true;
+    renderPassDesc.depthStencilAttachment = &depthStencilAttachment;
 
-  renderPassDesc.depthStencilAttachment = &depthStencilAttachment;
+    RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
+    renderPass.setViewport(SIDEBAR_WIDTH, 0, m_width - SIDEBAR_WIDTH,
+                           m_height / 2.0f, 0.0f, 1.0f);
+    m_sceneTop.onFrame(renderPass, m_width - SIDEBAR_WIDTH, m_height / 2.0f,
+                       glfwGetTime());
+    renderPass.end();
+  }
 
-  // renderPassDesc.timestampWriteCount = 0;
-  renderPassDesc.timestampWrites = nullptr;
-  RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
+  // Render Bottom Scene
+  {
+    RenderPassDescriptor renderPassDesc{};
+    RenderPassColorAttachment renderPassColorAttachment{};
+    renderPassColorAttachment.view = nextTexture;
+    renderPassColorAttachment.resolveTarget = nullptr;
+    renderPassColorAttachment.loadOp = LoadOp::Load; // Load previous content
+    renderPassColorAttachment.storeOp = StoreOp::Store;
+    renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+    renderPassDesc.colorAttachmentCount = 1;
+    renderPassDesc.colorAttachments = &renderPassColorAttachment;
 
-  renderPass.setPipeline(m_pipeline);
+    RenderPassDepthStencilAttachment depthStencilAttachment{};
+    depthStencilAttachment.view = m_sceneBottom.getDepthTextureView();
+    if (!depthStencilAttachment.view)
+      std::cerr << "Bottom Scene Depth View is NULL" << std::endl;
+    depthStencilAttachment.depthClearValue = 1.0f;
+    depthStencilAttachment.depthLoadOp = LoadOp::Clear;
+    depthStencilAttachment.depthStoreOp = StoreOp::Store;
+    depthStencilAttachment.depthReadOnly = false;
+    depthStencilAttachment.stencilClearValue = 0;
+    depthStencilAttachment.stencilLoadOp = LoadOp::Undefined;
+    depthStencilAttachment.stencilStoreOp = StoreOp::Undefined;
+    depthStencilAttachment.stencilReadOnly = true;
 
-  renderPass.setVertexBuffer(0, m_vertexBuffer, 0,
-                             m_vertexCount * sizeof(VertexAttributes));
+    renderPassDesc.depthStencilAttachment = &depthStencilAttachment;
 
-  // Set binding group
-  renderPass.setBindGroup(0, m_bindGroup, 0, nullptr);
+    RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
+    renderPass.setViewport(SIDEBAR_WIDTH, m_height / 2.0f,
+                           m_width - SIDEBAR_WIDTH, m_height / 2.0f, 0.0f,
+                           1.0f);
+    m_sceneBottom.onFrame(renderPass, m_width - SIDEBAR_WIDTH, m_height / 2.0f,
+                          glfwGetTime());
+    renderPass.end();
+  }
 
-  renderPass.draw(m_vertexCount, 1, 0, 0);
+  // Render GUI
+  {
+    RenderPassDescriptor renderPassDesc{};
+    RenderPassColorAttachment renderPassColorAttachment{};
+    renderPassColorAttachment.view = nextTexture;
+    renderPassColorAttachment.resolveTarget = nullptr;
+    renderPassColorAttachment.loadOp = LoadOp::Load;
+    renderPassColorAttachment.storeOp = StoreOp::Store;
+    renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+    renderPassDesc.colorAttachmentCount = 1;
+    renderPassDesc.colorAttachments = &renderPassColorAttachment;
 
-  // We add the GUI drawing commands to the render pass
-  updateGui(renderPass);
-
-  renderPass.end();
-  renderPass.release();
+    RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
+    updateGui(renderPass);
+    renderPass.end();
+  }
 
   nextTexture.release();
 
@@ -177,13 +207,8 @@ void Application::onFrame() {
 
 void Application::onFinish() {
   terminateGui();
-  terminateBindGroup();
-  terminateUniforms();
-  terminateGeometry();
-  terminateTexture();
-  terminateRenderPipeline();
-  terminateBindGroupLayout();
-  terminateDepthBuffer();
+  m_sceneTop.onFinish();
+  m_sceneBottom.onFinish();
   terminateSwapChain();
   terminateWindowAndDevice();
 }
@@ -317,13 +342,14 @@ void Application::terminateWindowAndDevice() {
 
 bool Application::initSwapChain() {
   // Get the current size of the window's framebuffer:
-  int width, height;
-  glfwGetFramebufferSize(m_window, &width, &height);
+  // Get the current size of the window's framebuffer:
+  glfwGetFramebufferSize(m_window, &m_width, &m_height);
 
   std::cout << "Creating swapchain..." << std::endl;
   SwapChainDescriptor swapChainDesc;
-  swapChainDesc.width = static_cast<uint32_t>(width);
-  swapChainDesc.height = static_cast<uint32_t>(height);
+  swapChainDesc.width = static_cast<uint32_t>(m_width);
+  swapChainDesc.height = static_cast<uint32_t>(m_height);
+  std::cout << "Swapchain format: " << (int)m_swapChainFormat << std::endl;
   swapChainDesc.usage = TextureUsage::RenderAttachment;
   swapChainDesc.format = m_swapChainFormat;
   swapChainDesc.presentMode = PresentMode::Fifo;
@@ -334,410 +360,58 @@ bool Application::initSwapChain() {
 
 void Application::terminateSwapChain() { m_swapChain.release(); }
 
-bool Application::initDepthBuffer() {
-  // Get the current size of the window's framebuffer:
-  int width, height;
-  glfwGetFramebufferSize(m_window, &width, &height);
-
-  // Create the depth texture
-  TextureDescriptor depthTextureDesc;
-  depthTextureDesc.dimension = TextureDimension::_2D;
-  depthTextureDesc.format = m_depthTextureFormat;
-  depthTextureDesc.mipLevelCount = 1;
-  depthTextureDesc.sampleCount = 1;
-  depthTextureDesc.size = {static_cast<uint32_t>(width),
-                           static_cast<uint32_t>(height), 1};
-  depthTextureDesc.usage = TextureUsage::RenderAttachment;
-  depthTextureDesc.viewFormatCount = 1;
-  depthTextureDesc.viewFormats = (WGPUTextureFormat *)&m_depthTextureFormat;
-  m_depthTexture = m_device.createTexture(depthTextureDesc);
-  std::cout << "Depth texture: " << m_depthTexture << std::endl;
-
-  // Create the view of the depth texture manipulated by the rasterizer
-  TextureViewDescriptor depthTextureViewDesc;
-  depthTextureViewDesc.aspect = TextureAspect::DepthOnly;
-  depthTextureViewDesc.baseArrayLayer = 0;
-  depthTextureViewDesc.arrayLayerCount = 1;
-  depthTextureViewDesc.baseMipLevel = 0;
-  depthTextureViewDesc.mipLevelCount = 1;
-  depthTextureViewDesc.dimension = TextureViewDimension::_2D;
-  depthTextureViewDesc.format = m_depthTextureFormat;
-  m_depthTextureView = m_depthTexture.createView(depthTextureViewDesc);
-  std::cout << "Depth texture view: " << m_depthTextureView << std::endl;
-
-  return m_depthTextureView != nullptr;
-}
-
-void Application::terminateDepthBuffer() {
-  m_depthTextureView.release();
-  m_depthTexture.destroy();
-  m_depthTexture.release();
-}
-
-bool Application::initRenderPipeline() {
-  std::cout << "Creating shader module..." << std::endl;
-  m_shaderModule =
-      ResourceManager::loadShaderModule(RESOURCE_DIR "/shader.wgsl", m_device);
-  std::cout << "Shader module: " << m_shaderModule << std::endl;
-
-  std::cout << "Creating render pipeline..." << std::endl;
-  RenderPipelineDescriptor pipelineDesc;
-
-  // Vertex fetch
-  std::vector<VertexAttribute> vertexAttribs(4);
-
-  // Position attribute
-  vertexAttribs[0].shaderLocation = 0;
-  vertexAttribs[0].format = VertexFormat::Float32x3;
-  vertexAttribs[0].offset = 0;
-
-  // Normal attribute
-  vertexAttribs[1].shaderLocation = 1;
-  vertexAttribs[1].format = VertexFormat::Float32x3;
-  vertexAttribs[1].offset = offsetof(VertexAttributes, normal);
-
-  // Color attribute
-  vertexAttribs[2].shaderLocation = 2;
-  vertexAttribs[2].format = VertexFormat::Float32x3;
-  vertexAttribs[2].offset = offsetof(VertexAttributes, color);
-
-  // UV attribute
-  vertexAttribs[3].shaderLocation = 3;
-  vertexAttribs[3].format = VertexFormat::Float32x2;
-  vertexAttribs[3].offset = offsetof(VertexAttributes, uv);
-
-  VertexBufferLayout vertexBufferLayout;
-  vertexBufferLayout.attributeCount = (uint32_t)vertexAttribs.size();
-  vertexBufferLayout.attributes = vertexAttribs.data();
-  vertexBufferLayout.arrayStride = sizeof(VertexAttributes);
-  vertexBufferLayout.stepMode = VertexStepMode::Vertex;
-
-  pipelineDesc.vertex.bufferCount = 1;
-  pipelineDesc.vertex.buffers = &vertexBufferLayout;
-
-  pipelineDesc.vertex.module = m_shaderModule;
-  pipelineDesc.vertex.entryPoint = "vs_main";
-  pipelineDesc.vertex.constantCount = 0;
-  pipelineDesc.vertex.constants = nullptr;
-
-  pipelineDesc.primitive.topology = PrimitiveTopology::TriangleList;
-  pipelineDesc.primitive.stripIndexFormat = IndexFormat::Undefined;
-  pipelineDesc.primitive.frontFace = FrontFace::CCW;
-  pipelineDesc.primitive.cullMode = CullMode::None;
-
-  FragmentState fragmentState;
-  pipelineDesc.fragment = &fragmentState;
-  fragmentState.module = m_shaderModule;
-  fragmentState.entryPoint = "fs_main";
-  fragmentState.constantCount = 0;
-  fragmentState.constants = nullptr;
-
-  BlendState blendState;
-  blendState.color.srcFactor = BlendFactor::SrcAlpha;
-  blendState.color.dstFactor = BlendFactor::OneMinusSrcAlpha;
-  blendState.color.operation = BlendOperation::Add;
-  blendState.alpha.srcFactor = BlendFactor::Zero;
-  blendState.alpha.dstFactor = BlendFactor::One;
-  blendState.alpha.operation = BlendOperation::Add;
-
-  ColorTargetState colorTarget;
-  colorTarget.format = m_swapChainFormat;
-  colorTarget.blend = &blendState;
-  colorTarget.writeMask = ColorWriteMask::All;
-
-  fragmentState.targetCount = 1;
-  fragmentState.targets = &colorTarget;
-
-  DepthStencilState depthStencilState = Default;
-  depthStencilState.depthCompare = CompareFunction::Less;
-  depthStencilState.depthWriteEnabled = true;
-  depthStencilState.format = m_depthTextureFormat;
-  depthStencilState.stencilReadMask = 0;
-  depthStencilState.stencilWriteMask = 0;
-
-  pipelineDesc.depthStencil = &depthStencilState;
-
-  pipelineDesc.multisample.count = 1;
-  pipelineDesc.multisample.mask = ~0u;
-  pipelineDesc.multisample.alphaToCoverageEnabled = false;
-
-  // Create the pipeline layout
-  PipelineLayoutDescriptor layoutDesc{};
-  layoutDesc.bindGroupLayoutCount = 1;
-  layoutDesc.bindGroupLayouts = (WGPUBindGroupLayout *)&m_bindGroupLayout;
-  PipelineLayout layout = m_device.createPipelineLayout(layoutDesc);
-  pipelineDesc.layout = layout;
-
-  m_pipeline = m_device.createRenderPipeline(pipelineDesc);
-  std::cout << "Render pipeline: " << m_pipeline << std::endl;
-
-  return m_pipeline != nullptr;
-}
-
-void Application::terminateRenderPipeline() {
-  m_pipeline.release();
-  m_shaderModule.release();
-}
-
-bool Application::initTexture() {
-  // Create a sampler
-  SamplerDescriptor samplerDesc;
-  samplerDesc.addressModeU = AddressMode::Repeat;
-  samplerDesc.addressModeV = AddressMode::Repeat;
-  samplerDesc.addressModeW = AddressMode::Repeat;
-  samplerDesc.magFilter = FilterMode::Linear;
-  samplerDesc.minFilter = FilterMode::Linear;
-  samplerDesc.mipmapFilter = MipmapFilterMode::Linear;
-  samplerDesc.lodMinClamp = 0.0f;
-  samplerDesc.lodMaxClamp = 8.0f;
-  samplerDesc.compare = CompareFunction::Undefined;
-  samplerDesc.maxAnisotropy = 1;
-  m_sampler = m_device.createSampler(samplerDesc);
-
-  // Create a texture
-  m_texture = ResourceManager::loadTexture(
-      RESOURCE_DIR "/fourareen2K_albedo.jpg", m_device, &m_textureView);
-  if (!m_texture) {
-    std::cerr << "Could not load texture!" << std::endl;
-    return false;
-  }
-  std::cout << "Texture: " << m_texture << std::endl;
-  std::cout << "Texture view: " << m_textureView << std::endl;
-
-  return m_textureView != nullptr;
-}
-
-void Application::terminateTexture() {
-  m_textureView.release();
-  m_texture.destroy();
-  m_texture.release();
-  m_sampler.release();
-}
-
-bool Application::initGeometry() {
-  // Load mesh data from OBJ file
-  std::vector<VertexAttributes> vertexData;
-  bool success = ResourceManager::loadGeometryFromObj(
-      RESOURCE_DIR "/fourareen.obj", vertexData);
-  if (!success) {
-    std::cerr << "Could not load geometry!" << std::endl;
-    return false;
-  }
-
-  // Create vertex buffer
-  BufferDescriptor bufferDesc;
-  bufferDesc.size = vertexData.size() * sizeof(VertexAttributes);
-  bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
-  bufferDesc.mappedAtCreation = false;
-  m_vertexBuffer = m_device.createBuffer(bufferDesc);
-  m_queue.writeBuffer(m_vertexBuffer, 0, vertexData.data(), bufferDesc.size);
-
-  m_vertexCount = static_cast<int>(vertexData.size());
-
-  return m_vertexBuffer != nullptr;
-}
-
-void Application::terminateGeometry() {
-  m_vertexBuffer.destroy();
-  m_vertexBuffer.release();
-  m_vertexCount = 0;
-}
-
-bool Application::initUniforms() {
-  // Create uniform buffer
-  BufferDescriptor bufferDesc;
-  bufferDesc.size = sizeof(MyUniforms);
-  bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Uniform;
-  bufferDesc.mappedAtCreation = false;
-  m_uniformBuffer = m_device.createBuffer(bufferDesc);
-
-  // Upload the initial value of the uniforms
-  m_uniforms.modelMatrix = mat4x4(1.0);
-  m_uniforms.viewMatrix =
-      glm::lookAt(vec3(-2.0f, -3.0f, 2.0f), vec3(0.0f), vec3(0, 0, 1));
-  m_uniforms.projectionMatrix =
-      glm::perspective(45 * PI / 180, 640.0f / 480.0f, 0.01f, 100.0f);
-  m_uniforms.time = 1.0f;
-  m_uniforms.color = {0.0f, 1.0f, 0.4f, 1.0f};
-  m_queue.writeBuffer(m_uniformBuffer, 0, &m_uniforms, sizeof(MyUniforms));
-
-  updateViewMatrix();
-  return m_uniformBuffer != nullptr;
-}
-
-void Application::terminateUniforms() {
-  m_uniformBuffer.destroy();
-  m_uniformBuffer.release();
-}
-
-bool Application::initBindGroupLayout() {
-  std::vector<BindGroupLayoutEntry> bindingLayoutEntries(4, Default);
-
-  // The uniform buffer binding that we already had
-  BindGroupLayoutEntry &bindingLayout = bindingLayoutEntries[0];
-  bindingLayout.binding = 0;
-  bindingLayout.visibility = ShaderStage::Vertex | ShaderStage::Fragment;
-  bindingLayout.buffer.type = BufferBindingType::Uniform;
-  bindingLayout.buffer.minBindingSize = sizeof(MyUniforms);
-
-  // The texture binding
-  BindGroupLayoutEntry &textureBindingLayout = bindingLayoutEntries[1];
-  textureBindingLayout.binding = 1;
-  textureBindingLayout.visibility = ShaderStage::Fragment;
-  textureBindingLayout.texture.sampleType = TextureSampleType::Float;
-  textureBindingLayout.texture.viewDimension = TextureViewDimension::_2D;
-
-  // The texture sampler binding
-  BindGroupLayoutEntry &samplerBindingLayout = bindingLayoutEntries[2];
-  samplerBindingLayout.binding = 2;
-  samplerBindingLayout.visibility = ShaderStage::Fragment;
-  samplerBindingLayout.sampler.type = SamplerBindingType::Filtering;
-
-  // The lighting uniform buffer binding
-  BindGroupLayoutEntry &lightingUniformLayout = bindingLayoutEntries[3];
-  lightingUniformLayout.binding = 3;
-  lightingUniformLayout.visibility = ShaderStage::Fragment;
-  lightingUniformLayout.buffer.type = BufferBindingType::Uniform;
-  lightingUniformLayout.buffer.minBindingSize = sizeof(LightingUniforms);
-
-  // Create a bind group layout
-  BindGroupLayoutDescriptor bindGroupLayoutDesc{};
-  bindGroupLayoutDesc.entryCount = (uint32_t)bindingLayoutEntries.size();
-  bindGroupLayoutDesc.entries = bindingLayoutEntries.data();
-  m_bindGroupLayout = m_device.createBindGroupLayout(bindGroupLayoutDesc);
-
-  return m_bindGroupLayout != nullptr;
-}
-
-void Application::terminateBindGroupLayout() { m_bindGroupLayout.release(); }
-
-bool Application::initBindGroup() {
-  // Create a binding
-  std::vector<BindGroupEntry> bindings(4);
-
-  bindings[0].binding = 0;
-  bindings[0].buffer = m_uniformBuffer;
-  bindings[0].offset = 0;
-  bindings[0].size = sizeof(MyUniforms);
-
-  bindings[1].binding = 1;
-  bindings[1].textureView = m_textureView;
-
-  bindings[2].binding = 2;
-  bindings[2].sampler = m_sampler;
-
-  bindings[3].binding = 3;
-  bindings[3].buffer = m_lightingUniformBuffer;
-  bindings[3].offset = 0;
-  bindings[3].size = sizeof(LightingUniforms);
-
-  BindGroupDescriptor bindGroupDesc;
-  bindGroupDesc.layout = m_bindGroupLayout;
-  bindGroupDesc.entryCount = (uint32_t)bindings.size();
-  bindGroupDesc.entries = bindings.data();
-  m_bindGroup = m_device.createBindGroup(bindGroupDesc);
-
-  return m_bindGroup != nullptr;
-}
-
-void Application::terminateBindGroup() { m_bindGroup.release(); }
-
-void Application::updateProjectionMatrix() {
-  int width, height;
-  glfwGetFramebufferSize(m_window, &width, &height);
-  float ratio = width / (float)height;
-  m_uniforms.projectionMatrix =
-      glm::perspective(45 * PI / 180, ratio, 0.01f, 100.0f);
-  m_queue.writeBuffer(m_uniformBuffer, offsetof(MyUniforms, projectionMatrix),
-                      &m_uniforms.projectionMatrix,
-                      sizeof(MyUniforms::projectionMatrix));
-}
+// Methods moved to Scene
 
 void Application::onResize() {
-  // Terminate in reverse order
-  terminateDepthBuffer();
   terminateSwapChain();
-
-  // Re-init
   initSwapChain();
-  initDepthBuffer();
-
-  updateProjectionMatrix();
-}
-
-void Application::updateViewMatrix() {
-  float cx = cos(m_cameraState.angles.x);
-  float sx = sin(m_cameraState.angles.x);
-  float cy = cos(m_cameraState.angles.y);
-  float sy = sin(m_cameraState.angles.y);
-  vec3 position = vec3(cx * cy, sx * cy, sy) * std::exp(-m_cameraState.zoom);
-  m_uniforms.viewMatrix = glm::lookAt(position, vec3(0.0f), vec3(0, 0, 1));
-  m_queue.writeBuffer(m_uniformBuffer, offsetof(MyUniforms, viewMatrix),
-                      &m_uniforms.viewMatrix, sizeof(MyUniforms::viewMatrix));
+  m_sceneTop.onResize(m_width, m_height, m_width - (int)SIDEBAR_WIDTH,
+                      m_height / 2);
+  m_sceneBottom.onResize(m_width, m_height, m_width - (int)SIDEBAR_WIDTH,
+                         m_height / 2);
 }
 
 void Application::onMouseMove(double xpos, double ypos) {
-  if (m_drag.active) {
-    vec2 currentMouse = vec2(-(float)xpos, (float)ypos);
-    vec2 delta = (currentMouse - m_drag.startMouse) * m_drag.sensitivity;
-    m_cameraState.angles = m_drag.startCameraState.angles + delta;
-    // Clamp to avoid going too far when orbitting up/down
-    m_cameraState.angles.y =
-        glm::clamp(m_cameraState.angles.y, -PI / 2 + 1e-5f, PI / 2 - 1e-5f);
-    updateViewMatrix();
-
-    // Inertia
-    m_drag.velocity = delta - m_drag.previousDelta;
-    m_drag.previousDelta = delta;
+  if (xpos > SIDEBAR_WIDTH) {
+    if (ypos < m_height / 2.0) {
+      m_sceneTop.onMouseMove(xpos - SIDEBAR_WIDTH, ypos);
+    } else {
+      m_sceneBottom.onMouseMove(xpos - SIDEBAR_WIDTH, ypos - m_height / 2.0);
+    }
   }
 }
 
-void Application::onMouseButton(int button, int action, int /* modifiers */) {
-  ImGuiIO &io = ImGui::GetIO();
-  if (io.WantCaptureMouse) {
-    // Don't rotate the camera if the mouse is already captured by an ImGui
-    // interaction at this frame.
+void Application::onMouseButton(int button, int action, int mods) {
+  if (ImGui::GetCurrentContext() != nullptr && action == GLFW_PRESS &&
+      ImGui::GetIO().WantCaptureMouse) {
     return;
   }
-
-  if (button == GLFW_MOUSE_BUTTON_LEFT) {
-    switch (action) {
-    case GLFW_PRESS:
-      m_drag.active = true;
-      double xpos, ypos;
-      glfwGetCursorPos(m_window, &xpos, &ypos);
-      m_drag.startMouse = vec2(-(float)xpos, (float)ypos);
-      m_drag.startCameraState = m_cameraState;
-      break;
-    case GLFW_RELEASE:
-      m_drag.active = false;
-      break;
+  double xpos, ypos;
+  glfwGetCursorPos(m_window, &xpos, &ypos);
+  if (xpos > SIDEBAR_WIDTH) {
+    if (ypos < m_height / 2.0) {
+      m_sceneTop.onMouseButton(button, action, mods, xpos - SIDEBAR_WIDTH,
+                               ypos);
+    } else {
+      m_sceneBottom.onMouseButton(button, action, mods, xpos - SIDEBAR_WIDTH,
+                                  ypos - m_height / 2.0);
     }
   }
 }
 
-void Application::onScroll(double /* xoffset */, double yoffset) {
-  m_cameraState.zoom += m_drag.scrollSensitivity * static_cast<float>(yoffset);
-  m_cameraState.zoom = glm::clamp(m_cameraState.zoom, -2.0f, 2.0f);
-  updateViewMatrix();
-}
-
-void Application::updateDragInertia() {
-  constexpr float eps = 1e-4f;
-  // Apply inertia only when the user released the click.
-  if (!m_drag.active) {
-    // Avoid updating the matrix when the velocity is no longer noticeable
-    if (std::abs(m_drag.velocity.x) < eps &&
-        std::abs(m_drag.velocity.y) < eps) {
-      return;
+void Application::onScroll(double xoffset, double yoffset) {
+  if (ImGui::GetCurrentContext() != nullptr &&
+      ImGui::GetIO().WantCaptureMouse) {
+    return;
+  }
+  double xpos, ypos;
+  glfwGetCursorPos(m_window, &xpos, &ypos);
+  if (xpos > SIDEBAR_WIDTH) {
+    if (ypos < m_height / 2.0) {
+      m_sceneTop.onScroll(xoffset, yoffset);
+    } else {
+      m_sceneBottom.onScroll(xoffset, yoffset);
     }
-    m_cameraState.angles += m_drag.velocity;
-    m_cameraState.angles.y =
-        glm::clamp(m_cameraState.angles.y, -PI / 2 + 1e-5f, PI / 2 - 1e-5f);
-    // Dampen the velocity so that it decreases exponentially and stops
-    // after a few frames.
-    m_drag.velocity *= m_drag.inertia;
-    updateViewMatrix();
   }
 }
 
@@ -749,7 +423,8 @@ bool Application::initGui() {
 
   // Setup Platform/Renderer backends
   ImGui_ImplGlfw_InitForOther(m_window, true);
-  ImGui_ImplWGPU_Init(m_device, 3, m_swapChainFormat, m_depthTextureFormat);
+  ImGui_ImplWGPU_Init(m_device, 3, m_swapChainFormat,
+                      wgpu::TextureFormat::Undefined);
   return true;
 }
 
@@ -760,7 +435,7 @@ void Application::terminateGui() {
 
 void DrawRightSidebar() {
   // 1. Setup dimensions
-  float width = 100.0f;
+  float width = SIDEBAR_WIDTH;
 
   // 2. Get the main viewport (the full OS window or screen)
   const ImGuiViewport *viewport = ImGui::GetMainViewport();
@@ -806,24 +481,34 @@ void Application::updateGui(RenderPassEncoder renderPass) {
   ImGui::NewFrame();
 
   // Build our UI
-  bool changed = false;
   ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
 
   ImGui::Begin("Lighting");
-  changed = ImGui::ColorEdit3("Color #0",
-                              glm::value_ptr(m_lightingUniforms.colors[0])) ||
-            changed;
+
+  bool changed = false;
+  ImGui::Begin("Lighting");
+  changed = ImGui::ColorEdit3(
+      "Color #0", (float *)&m_sceneTop.getLightingUniforms().colors[0]);
   changed =
-      ImGui::DragDirection("Direction #0", m_lightingUniforms.directions[0]) ||
+      ImGui::ColorEdit3("Color #1",
+                        (float *)&m_sceneTop.getLightingUniforms().colors[1]) ||
       changed;
-  changed = ImGui::ColorEdit3("Color #1",
-                              glm::value_ptr(m_lightingUniforms.colors[1])) ||
+  changed = ImGui::DragFloat3(
+                "Direction #0",
+                (float *)&m_sceneTop.getLightingUniforms().directions[0]) ||
             changed;
-  changed =
-      ImGui::DragDirection("Direction #1", m_lightingUniforms.directions[1]) ||
-      changed;
+  changed = ImGui::DragFloat3(
+                "Direction #1",
+                (float *)&m_sceneTop.getLightingUniforms().directions[1]) ||
+            changed;
   ImGui::End();
-  m_lightingUniformsChanged = changed;
+
+  if (changed) {
+    m_sceneTop.getLightingUniformsChanged() = true;
+    m_sceneBottom.getLightingUniforms() = m_sceneTop.getLightingUniforms();
+    m_sceneBottom.getLightingUniformsChanged() = true;
+  }
+  ImGui::End();
 
   DrawRightSidebar();
 
@@ -835,33 +520,4 @@ void Application::updateGui(RenderPassEncoder renderPass) {
   ImGui_ImplWGPU_RenderDrawData(ImGui::GetDrawData(), renderPass);
 }
 
-bool Application::initLightingUniforms() {
-  // Create uniform buffer
-  BufferDescriptor bufferDesc;
-  bufferDesc.size = sizeof(LightingUniforms);
-  bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Uniform;
-  bufferDesc.mappedAtCreation = false;
-  m_lightingUniformBuffer = m_device.createBuffer(bufferDesc);
-
-  // Initial values
-  m_lightingUniforms.directions[0] = {0.5f, -0.9f, 0.1f, 0.0f};
-  m_lightingUniforms.directions[1] = {0.2f, 0.4f, 0.3f, 0.0f};
-  m_lightingUniforms.colors[0] = {1.0f, 0.9f, 0.6f, 1.0f};
-  m_lightingUniforms.colors[1] = {0.6f, 0.9f, 1.0f, 1.0f};
-
-  updateLightingUniforms();
-
-  return m_lightingUniformBuffer != nullptr;
-}
-
-void Application::terminateLightingUniforms() {
-  m_lightingUniformBuffer.destroy();
-  m_lightingUniformBuffer.release();
-}
-
-void Application::updateLightingUniforms() {
-  if (m_lightingUniformsChanged) {
-    m_queue.writeBuffer(m_lightingUniformBuffer, 0, &m_lightingUniforms,
-                        sizeof(LightingUniforms));
-  }
-}
+// Methods moved to Scene
