@@ -75,10 +75,12 @@ bool Application::onInit() {
 
   if (!m_sceneTop.onInit(m_device, m_queue, m_swapChainFormat,
                          m_depthTextureFormat, m_width, m_height,
-                         m_width - (int)SIDEBAR_WIDTH, m_height / 2))
+                         (int)SIDEBAR_WIDTH, 0, m_width - (int)SIDEBAR_WIDTH,
+                         m_height / 2))
     return false;
   if (!m_sceneBottom.onInit(m_device, m_queue, m_swapChainFormat,
                             m_depthTextureFormat, m_width, m_height,
+                            (int)SIDEBAR_WIDTH, m_height / 2,
                             m_width - (int)SIDEBAR_WIDTH, m_height / 2))
     return false;
   return true;
@@ -102,76 +104,10 @@ void Application::onFrame() {
   CommandEncoder encoder = m_device.createCommandEncoder(commandEncoderDesc);
 
   // Render Top Scene
-  {
-    RenderPassDescriptor renderPassDesc{};
-    RenderPassColorAttachment renderPassColorAttachment{};
-    renderPassColorAttachment.view = nextTexture;
-    renderPassColorAttachment.resolveTarget = nullptr;
-    renderPassColorAttachment.loadOp = LoadOp::Clear;
-    renderPassColorAttachment.storeOp = StoreOp::Store;
-    renderPassColorAttachment.clearValue = Color{0.05, 0.05, 0.05, 1.0};
-    renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
-    renderPassDesc.colorAttachmentCount = 1;
-    renderPassDesc.colorAttachments = &renderPassColorAttachment;
-
-    RenderPassDepthStencilAttachment depthStencilAttachment{};
-    depthStencilAttachment.view = m_sceneTop.getDepthTextureView();
-    if (!depthStencilAttachment.view)
-      std::cerr << "Top Scene Depth View is NULL" << std::endl;
-    depthStencilAttachment.depthClearValue = 1.0f;
-    depthStencilAttachment.depthLoadOp = LoadOp::Clear;
-    depthStencilAttachment.depthStoreOp = StoreOp::Store;
-    depthStencilAttachment.depthReadOnly = false;
-    depthStencilAttachment.stencilClearValue = 0;
-    depthStencilAttachment.stencilLoadOp = LoadOp::Undefined;
-    depthStencilAttachment.stencilStoreOp = StoreOp::Undefined;
-    depthStencilAttachment.stencilReadOnly = true;
-
-    renderPassDesc.depthStencilAttachment = &depthStencilAttachment;
-
-    RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
-    renderPass.setViewport(SIDEBAR_WIDTH, 0, m_width - SIDEBAR_WIDTH,
-                           m_height / 2.0f, 0.0f, 1.0f);
-    m_sceneTop.onFrame(renderPass, m_width - SIDEBAR_WIDTH, m_height / 2.0f,
-                       glfwGetTime());
-    renderPass.end();
-  }
+  m_sceneTop.onFrame(encoder, nextTexture, LoadOp::Clear, glfwGetTime());
 
   // Render Bottom Scene
-  {
-    RenderPassDescriptor renderPassDesc{};
-    RenderPassColorAttachment renderPassColorAttachment{};
-    renderPassColorAttachment.view = nextTexture;
-    renderPassColorAttachment.resolveTarget = nullptr;
-    renderPassColorAttachment.loadOp = LoadOp::Load; // Load previous content
-    renderPassColorAttachment.storeOp = StoreOp::Store;
-    renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
-    renderPassDesc.colorAttachmentCount = 1;
-    renderPassDesc.colorAttachments = &renderPassColorAttachment;
-
-    RenderPassDepthStencilAttachment depthStencilAttachment{};
-    depthStencilAttachment.view = m_sceneBottom.getDepthTextureView();
-    if (!depthStencilAttachment.view)
-      std::cerr << "Bottom Scene Depth View is NULL" << std::endl;
-    depthStencilAttachment.depthClearValue = 1.0f;
-    depthStencilAttachment.depthLoadOp = LoadOp::Clear;
-    depthStencilAttachment.depthStoreOp = StoreOp::Store;
-    depthStencilAttachment.depthReadOnly = false;
-    depthStencilAttachment.stencilClearValue = 0;
-    depthStencilAttachment.stencilLoadOp = LoadOp::Undefined;
-    depthStencilAttachment.stencilStoreOp = StoreOp::Undefined;
-    depthStencilAttachment.stencilReadOnly = true;
-
-    renderPassDesc.depthStencilAttachment = &depthStencilAttachment;
-
-    RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
-    renderPass.setViewport(SIDEBAR_WIDTH, m_height / 2.0f,
-                           m_width - SIDEBAR_WIDTH, m_height / 2.0f, 0.0f,
-                           1.0f);
-    m_sceneBottom.onFrame(renderPass, m_width - SIDEBAR_WIDTH, m_height / 2.0f,
-                          glfwGetTime());
-    renderPass.end();
-  }
+  m_sceneBottom.onFrame(encoder, nextTexture, LoadOp::Load, glfwGetTime());
 
   // Render GUI
   {
@@ -365,10 +301,10 @@ void Application::terminateSwapChain() { m_swapChain.release(); }
 void Application::onResize() {
   terminateSwapChain();
   initSwapChain();
-  m_sceneTop.onResize(m_width, m_height, m_width - (int)SIDEBAR_WIDTH,
-                      m_height / 2);
-  m_sceneBottom.onResize(m_width, m_height, m_width - (int)SIDEBAR_WIDTH,
-                         m_height / 2);
+  m_sceneTop.onResize(m_width, m_height, (int)SIDEBAR_WIDTH, 0,
+                      m_width - (int)SIDEBAR_WIDTH, m_height / 2);
+  m_sceneBottom.onResize(m_width, m_height, (int)SIDEBAR_WIDTH, m_height / 2,
+                         m_width - (int)SIDEBAR_WIDTH, m_height / 2);
 }
 
 void Application::onMouseMove(double xpos, double ypos) {

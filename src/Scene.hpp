@@ -17,11 +17,13 @@ public:
   bool onInit(wgpu::Device device, wgpu::Queue queue,
               wgpu::TextureFormat swapChainFormat,
               wgpu::TextureFormat depthTextureFormat, int width, int height,
-              int viewportWidth, int viewportHeight);
+              int viewportX, int viewportY, int viewportWidth,
+              int viewportHeight);
   void onFinish();
-  void onFrame(wgpu::RenderPassEncoder renderPass, int width, int height,
-               float time);
-  void onResize(int width, int height, int viewportWidth, int viewportHeight);
+  void onFrame(wgpu::CommandEncoder encoder, wgpu::TextureView renderTarget,
+               wgpu::LoadOp loadOp, float time);
+  void onResize(int width, int height, int viewportX, int viewportY,
+                int viewportWidth, int viewportHeight);
 
   // Input events
   void onMouseMove(double xpos, double ypos);
@@ -137,4 +139,6 @@ private:
 
   int m_width = 0;
   int m_height = 0;
+  int m_viewportX = 0;
+  int m_viewportY = 0;
 };

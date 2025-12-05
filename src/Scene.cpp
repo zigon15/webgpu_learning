@@ -13,13 +13,16 @@ using namespace wgpu;
 bool Scene::onInit(wgpu::Device device, wgpu::Queue queue,
                    wgpu::TextureFormat swapChainFormat,
                    wgpu::TextureFormat depthTextureFormat, int width,
-                   int height, int viewportWidth, int viewportHeight) {
+                   int height, int viewportX, int viewportY, int viewportWidth,
+                   int viewportHeight) {
   m_device = device;
   m_queue = queue;
   m_swapChainFormat = swapChainFormat;
   m_depthTextureFormat = depthTextureFormat;
   m_width = viewportWidth;
   m_height = viewportHeight;
+  m_viewportX = viewportX;
+  m_viewportY = viewportY;
 
   std::cout << "Scene::onInit depthTextureFormat: " << (int)depthTextureFormat
             << std::endl;
@@ -55,11 +58,9 @@ void Scene::onFinish() {
   terminateBindGroupLayout();
 }
 
-void Scene::onFrame(wgpu::RenderPassEncoder renderPass, int width, int height,
+void Scene::onFrame(wgpu::CommandEncoder encoder,
+                    wgpu::TextureView renderTarget, wgpu::LoadOp loadOp,
                     float time) {
-  m_width = width;
-  m_height = height;
-
   updateLightingUniforms();
   updateDragInertia();
 
@@ -67,6 +68,34 @@ void Scene::onFrame(wgpu::RenderPassEncoder renderPass, int width, int height,
   m_uniforms.time = time;
   m_queue.writeBuffer(m_uniformBuffer, offsetof(MyUniforms, time),
                       &m_uniforms.time, sizeof(MyUniforms::time));
+
+  RenderPassDescriptor renderPassDesc{};
+  RenderPassColorAttachment renderPassColorAttachment{};
+  renderPassColorAttachment.view = renderTarget;
+  renderPassColorAttachment.resolveTarget = nullptr;
+  renderPassColorAttachment.loadOp = loadOp;
+  renderPassColorAttachment.storeOp = StoreOp::Store;
+  renderPassColorAttachment.clearValue = Color{0.05, 0.05, 0.05, 1.0};
+  renderPassColorAttachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+  renderPassDesc.colorAttachmentCount = 1;
+  renderPassDesc.colorAttachments = &renderPassColorAttachment;
+
+  RenderPassDepthStencilAttachment depthStencilAttachment{};
+  depthStencilAttachment.view = m_depthTextureView;
+  depthStencilAttachment.depthClearValue = 1.0f;
+  depthStencilAttachment.depthLoadOp = LoadOp::Clear;
+  depthStencilAttachment.depthStoreOp = StoreOp::Store;
+  depthStencilAttachment.depthReadOnly = false;
+  depthStencilAttachment.stencilClearValue = 0;
+  depthStencilAttachment.stencilLoadOp = LoadOp::Undefined;
+  depthStencilAttachment.stencilStoreOp = StoreOp::Undefined;
+  depthStencilAttachment.stencilReadOnly = true;
+
+  renderPassDesc.depthStencilAttachment = &depthStencilAttachment;
+
+  RenderPassEncoder renderPass = encoder.beginRenderPass(renderPassDesc);
+  renderPass.setViewport((float)m_viewportX, (float)m_viewportY, (float)m_width,
+                         (float)m_height, 0.0f, 1.0f);
 
   renderPass.setPipeline(m_pipeline);
 
@@ -77,12 +106,16 @@ void Scene::onFrame(wgpu::RenderPassEncoder renderPass, int width, int height,
   renderPass.setBindGroup(0, m_bindGroup, 0, nullptr);
 
   renderPass.draw(m_vertexCount, 1, 0, 0);
+
+  renderPass.end();
 }
 
-void Scene::onResize(int width, int height, int viewportWidth,
-                     int viewportHeight) {
+void Scene::onResize(int width, int height, int viewportX, int viewportY,
+                     int viewportWidth, int viewportHeight) {
   m_width = viewportWidth;
   m_height = viewportHeight;
+  m_viewportX = viewportX;
+  m_viewportY = viewportY;
 
   terminateDepthBuffer();
   initDepthBuffer(width, height);
