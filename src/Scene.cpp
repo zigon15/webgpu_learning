@@ -10,6 +10,9 @@ constexpr float PI = 3.14159265358979323846f;
 using VertexAttributes = ResourceManager::VertexAttributes;
 using namespace wgpu;
 
+Scene::Scene(std::string objPath, std::string texturePath)
+    : m_objPath(objPath), m_texturePath(texturePath) {}
+
 bool Scene::onInit(wgpu::Device device, wgpu::Queue queue,
                    wgpu::TextureFormat swapChainFormat,
                    wgpu::TextureFormat depthTextureFormat, int width,
@@ -280,11 +283,52 @@ bool Scene::initTexture() {
   m_sampler = m_device.createSampler(samplerDesc);
 
   // Create a texture
-  m_texture = ResourceManager::loadTexture(
-      RESOURCE_DIR "/fourareen2K_albedo.jpg", m_device, &m_textureView);
-  if (!m_texture) {
-    std::cerr << "Could not load texture!" << std::endl;
-    return false;
+  if (m_texturePath.empty()) {
+    // Create a dummy 1x1 white texture
+    TextureDescriptor textureDesc;
+    textureDesc.dimension = TextureDimension::_2D;
+    textureDesc.format = TextureFormat::RGBA8Unorm;
+    textureDesc.mipLevelCount = 1;
+    textureDesc.sampleCount = 1;
+    textureDesc.size = {1, 1, 1};
+    textureDesc.usage = TextureUsage::TextureBinding | TextureUsage::CopyDst;
+    textureDesc.viewFormatCount = 0;
+    textureDesc.viewFormats = nullptr;
+    m_texture = m_device.createTexture(textureDesc);
+
+    TextureViewDescriptor textureViewDesc;
+    textureViewDesc.aspect = TextureAspect::All;
+    textureViewDesc.baseArrayLayer = 0;
+    textureViewDesc.arrayLayerCount = 1;
+    textureViewDesc.baseMipLevel = 0;
+    textureViewDesc.mipLevelCount = 1;
+    textureViewDesc.dimension = TextureViewDimension::_2D;
+    textureViewDesc.format = TextureFormat::RGBA8Unorm;
+    m_textureView = m_texture.createView(textureViewDesc);
+
+    // Upload white color
+    std::array<uint8_t, 4> white = {255, 255, 255, 255};
+    ImageCopyTexture destination;
+    destination.texture = m_texture;
+    destination.mipLevel = 0;
+    destination.origin = {0, 0, 0};
+    destination.aspect = TextureAspect::All;
+
+    TextureDataLayout source;
+    source.offset = 0;
+    source.bytesPerRow = 4;
+    source.rowsPerImage = 1;
+
+    m_queue.writeTexture(destination, white.data(), white.size(), source,
+                         textureDesc.size);
+
+  } else {
+    m_texture = ResourceManager::loadTexture(m_texturePath.c_str(), m_device,
+                                             &m_textureView);
+    if (!m_texture) {
+      std::cerr << "Could not load texture: " << m_texturePath << std::endl;
+      return false;
+    }
   }
   std::cout << "Texture: " << m_texture << std::endl;
   std::cout << "Texture view: " << m_textureView << std::endl;
@@ -302,8 +346,8 @@ void Scene::terminateTexture() {
 bool Scene::initGeometry() {
   // Load mesh data from OBJ file
   std::vector<VertexAttributes> vertexData;
-  bool success = ResourceManager::loadGeometryFromObj(
-      RESOURCE_DIR "/fourareen.obj", vertexData);
+  bool success =
+      ResourceManager::loadGeometryFromObj(m_objPath.c_str(), vertexData);
   if (!success) {
     std::cerr << "Could not load geometry!" << std::endl;
     return false;

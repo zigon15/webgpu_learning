@@ -3,6 +3,7 @@
 #include <array>
 #include <glm/glm.hpp>
 #include <memory>
+#include <string>
 #include <vector>
 #include <webgpu/webgpu.hpp>
 
@@ -13,6 +14,8 @@ public:
     std::array<glm::vec4, 2> colors;
   };
   static_assert(sizeof(LightingUniforms) % 16 == 0);
+
+  Scene(std::string objPath, std::string texturePath);
 
   bool onInit(wgpu::Device device, wgpu::Queue queue,
               wgpu::TextureFormat swapChainFormat,
@@ -141,4 +144,6 @@ private:
   int m_height = 0;
   int m_viewportX = 0;
   int m_viewportY = 0;
+  std::string m_objPath;
+  std::string m_texturePath;
 };

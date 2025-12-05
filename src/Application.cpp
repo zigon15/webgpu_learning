@@ -83,6 +83,11 @@ bool Application::onInit() {
                             (int)SIDEBAR_WIDTH, m_height / 2,
                             m_width - (int)SIDEBAR_WIDTH, m_height / 2))
     return false;
+
+  // Sync lighting uniforms
+  m_sceneBottom.getLightingUniforms() = m_sceneTop.getLightingUniforms();
+  m_sceneBottom.getLightingUniformsChanged() = true;
+
   return true;
 }
 
@@ -429,14 +434,14 @@ void Application::updateGui(RenderPassEncoder renderPass) {
       ImGui::ColorEdit3("Color #1",
                         (float *)&m_sceneTop.getLightingUniforms().colors[1]) ||
       changed;
-  changed = ImGui::DragFloat3(
-                "Direction #0",
-                (float *)&m_sceneTop.getLightingUniforms().directions[0]) ||
-            changed;
-  changed = ImGui::DragFloat3(
-                "Direction #1",
-                (float *)&m_sceneTop.getLightingUniforms().directions[1]) ||
-            changed;
+  changed =
+      ImGui::DragDirection("Direction #0",
+                           m_sceneTop.getLightingUniforms().directions[0]) ||
+      changed;
+  changed =
+      ImGui::DragDirection("Direction #1",
+                           m_sceneTop.getLightingUniforms().directions[1]) ||
+      changed;
   ImGui::End();
 
   if (changed) {

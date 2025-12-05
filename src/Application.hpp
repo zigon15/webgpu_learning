@@ -86,6 +86,7 @@ private:
   // Swap Chain
   wgpu::SwapChain m_swapChain = nullptr;
 
-  Scene m_sceneTop;
-  Scene m_sceneBottom;
+  Scene m_sceneTop = {RESOURCE_DIR "/fourareen.obj",
+                      RESOURCE_DIR "/fourareen2K_albedo.jpg"};
+  Scene m_sceneBottom = {RESOURCE_DIR "/pyramid.obj", ""};
 };
