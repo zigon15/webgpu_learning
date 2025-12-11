@@ -60,63 +60,65 @@ ShaderModule ResourceManager::loadShaderModule(const path &path,
   return device.createShaderModule(shaderDesc);
 }
 
-bool ResourceManager::loadGeometryFromObj(
-    const path &path, std::vector<VertexAttributes> &vertexData) {
-  tinyobj::attrib_t attrib;
-  std::vector<tinyobj::shape_t> shapes;
-  std::vector<tinyobj::material_t> materials;
+// bool ResourceManager::loadGeometryFromObj(
+//     const path &path, std::vector<VertexAttributes> &vertexData) {
+//   tinyobj::attrib_t attrib;
+//   std::vector<tinyobj::shape_t> shapes;
+//   std::vector<tinyobj::material_t> materials;
 
-  std::string warn;
-  std::string err;
+//   std::string warn;
+//   std::string err;
 
-  // Call the core loading procedure of TinyOBJLoader
-  bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err,
-                              path.string().c_str());
+//   // Call the core loading procedure of TinyOBJLoader
+//   bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err,
+//                               path.string().c_str());
 
-  // Check errors
-  if (!warn.empty()) {
-    std::cout << warn << std::endl;
-  }
+//   // Check errors
+//   if (!warn.empty()) {
+//     std::cout << warn << std::endl;
+//   }
 
-  if (!err.empty()) {
-    std::cerr << err << std::endl;
-  }
+//   if (!err.empty()) {
+//     std::cerr << err << std::endl;
+//   }
 
-  if (!ret) {
-    return false;
-  }
+//   if (!ret) {
+//     return false;
+//   }
 
-  // Filling in vertexData:
-  vertexData.clear();
-  for (const auto &shape : shapes) {
-    size_t offset = vertexData.size();
-    vertexData.resize(offset + shape.mesh.indices.size());
+//   // Filling in vertexData:
+//   vertexData.clear();
+//   for (const auto &shape : shapes) {
+//     size_t offset = vertexData.size();
+//     vertexData.resize(offset + shape.mesh.indices.size());
 
-    for (size_t i = 0; i < shape.mesh.indices.size(); ++i) {
-      const tinyobj::index_t &idx = shape.mesh.indices[i];
+//     for (size_t i = 0; i < shape.mesh.indices.size(); ++i) {
+//       const tinyobj::index_t &idx = shape.mesh.indices[i];
 
-      vertexData[offset + i].position = {
-          attrib.vertices[3 * idx.vertex_index + 0],
-          -attrib.vertices[3 * idx.vertex_index + 2],
-          attrib.vertices[3 * idx.vertex_index + 1]};
+//       vertexData[offset + i].position = {
+//           attrib.vertices[3 * idx.vertex_index + 0],
+//           -attrib.vertices[3 * idx.vertex_index + 2],
+//           attrib.vertices[3 * idx.vertex_index + 1]};
 
-      vertexData[offset + i].normal = {
-          attrib.normals[3 * idx.normal_index + 0],
-          -attrib.normals[3 * idx.normal_index + 2],
-          attrib.normals[3 * idx.normal_index + 1]};
+//       vertexData[offset + i].normal = {
+//           attrib.normals[3 * idx.normal_index + 0],
+//           -attrib.normals[3 * idx.normal_index + 2],
+//           attrib.normals[3 * idx.normal_index + 1]};
 
-      vertexData[offset + i].color = {attrib.colors[3 * idx.vertex_index + 0],
-                                      attrib.colors[3 * idx.vertex_index + 1],
-                                      attrib.colors[3 * idx.vertex_index + 2]};
+//       vertexData[offset + i].color = {attrib.colors[3 * idx.vertex_index +
+//       0],
+//                                       attrib.colors[3 * idx.vertex_index +
+//                                       1], attrib.colors[3 * idx.vertex_index
+//                                       + 2]};
 
-      vertexData[offset + i].uv = {
-          attrib.texcoords[2 * idx.texcoord_index + 0],
-          1 - attrib.texcoords[2 * idx.texcoord_index + 1]};
-    }
-  }
+//       vertexData[offset + i].uv = {
+//           attrib.texcoords[2 * idx.texcoord_index + 0],
+//           1 - attrib.texcoords[2 * idx.texcoord_index + 1]};
+//     }
+//   }
 
-  return true;
-}
+//   return true;
+// }
 
 // Auxiliary function for loadTexture
 static void writeMipMaps(Device device, Texture texture, Extent3D textureSize,

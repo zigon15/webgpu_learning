@@ -25,7 +25,9 @@
  */
 
 #include "Application.hpp"
+#include "Mesh.hpp"
 #include "ResourceManager.hpp"
+#include "src/attributes/Mesh.hpp"
 
 #include <GLFW/glfw3.h>
 #include <backends/imgui_impl_glfw.h>
@@ -47,7 +49,6 @@
 #include <string>
 
 using namespace wgpu;
-using VertexAttributes = ResourceManager::VertexAttributes;
 
 constexpr float PI = 3.14159265358979323846f;
 
@@ -74,10 +75,10 @@ bool Application::onInit() {
     return false;
   if (!initRenderPipeline())
     return false;
-  if (!initTexture())
-    return false;
-  if (!initGeometry())
-    return false;
+  // if (!initTexture())
+  //   return false;
+  // if (!initGeometry())
+  //   return false;
   if (!initUniforms())
     return false;
   if (!initLightingUniforms())
@@ -86,6 +87,15 @@ bool Application::onInit() {
     return false;
   if (!initGui())
     return false;
+
+  ZMesh *pMesh = new ZMesh(m_device, m_queue);
+  pMesh->init(RESOURCE_DIR "/pyramid.obj");
+  _meshes.push_back(pMesh);
+
+  pMesh = new ZMesh(m_device, m_queue);
+  pMesh->init(RESOURCE_DIR "/mammoth.obj");
+  _meshes.push_back(pMesh);
+
   return true;
 }
 
@@ -146,13 +156,17 @@ void Application::onFrame() {
 
   renderPass.setPipeline(m_pipeline);
 
-  renderPass.setVertexBuffer(0, m_vertexBuffer, 0,
-                             m_vertexCount * sizeof(VertexAttributes));
+  // renderPass.setVertexBuffer(0, m_vertexBuffer, 0,
+  //                            m_vertexCount *
+  //                            sizeof(ZMesh::VertexAttributes));
+  // renderPass.draw(m_vertexCount, 1, 0, 0);
 
   // Set binding group
   renderPass.setBindGroup(0, m_bindGroup, 0, nullptr);
 
-  renderPass.draw(m_vertexCount, 1, 0, 0);
+  for (ZMesh *pMesh : _meshes) {
+    pMesh->render(renderPass);
+  }
 
   // We add the GUI drawing commands to the render pass
   updateGui(renderPass);
@@ -179,8 +193,8 @@ void Application::onFinish() {
   terminateGui();
   terminateBindGroup();
   terminateUniforms();
-  terminateGeometry();
-  terminateTexture();
+  // terminateGeometry();
+  // terminateTexture();
   terminateRenderPipeline();
   terminateBindGroupLayout();
   terminateDepthBuffer();
@@ -227,8 +241,10 @@ bool Application::initWindowAndDevice() {
   RequiredLimits requiredLimits = Default;
   requiredLimits.limits.maxVertexAttributes = 4;
   requiredLimits.limits.maxVertexBuffers = 1;
-  requiredLimits.limits.maxBufferSize = 150000 * sizeof(VertexAttributes);
-  requiredLimits.limits.maxVertexBufferArrayStride = sizeof(VertexAttributes);
+  requiredLimits.limits.maxBufferSize =
+      150000 * sizeof(ZMesh::VertexAttributes);
+  requiredLimits.limits.maxVertexBufferArrayStride =
+      sizeof(ZMesh::VertexAttributes);
   requiredLimits.limits.minStorageBufferOffsetAlignment =
       supportedLimits.limits.minStorageBufferOffsetAlignment;
   requiredLimits.limits.minUniformBufferOffsetAlignment =
@@ -394,22 +410,22 @@ bool Application::initRenderPipeline() {
   // Normal attribute
   vertexAttribs[1].shaderLocation = 1;
   vertexAttribs[1].format = VertexFormat::Float32x3;
-  vertexAttribs[1].offset = offsetof(VertexAttributes, normal);
+  vertexAttribs[1].offset = offsetof(ZMesh::VertexAttributes, normal);
 
   // Color attribute
   vertexAttribs[2].shaderLocation = 2;
   vertexAttribs[2].format = VertexFormat::Float32x3;
-  vertexAttribs[2].offset = offsetof(VertexAttributes, color);
+  vertexAttribs[2].offset = offsetof(ZMesh::VertexAttributes, color);
 
   // UV attribute
   vertexAttribs[3].shaderLocation = 3;
   vertexAttribs[3].format = VertexFormat::Float32x2;
-  vertexAttribs[3].offset = offsetof(VertexAttributes, uv);
+  vertexAttribs[3].offset = offsetof(ZMesh::VertexAttributes, uv);
 
   VertexBufferLayout vertexBufferLayout;
   vertexBufferLayout.attributeCount = (uint32_t)vertexAttribs.size();
   vertexBufferLayout.attributes = vertexAttribs.data();
-  vertexBufferLayout.arrayStride = sizeof(VertexAttributes);
+  vertexBufferLayout.arrayStride = sizeof(ZMesh::VertexAttributes);
   vertexBufferLayout.stepMode = VertexStepMode::Vertex;
 
   pipelineDesc.vertex.bufferCount = 1;
@@ -479,69 +495,69 @@ void Application::terminateRenderPipeline() {
   m_shaderModule.release();
 }
 
-bool Application::initTexture() {
-  // Create a sampler
-  SamplerDescriptor samplerDesc;
-  samplerDesc.addressModeU = AddressMode::Repeat;
-  samplerDesc.addressModeV = AddressMode::Repeat;
-  samplerDesc.addressModeW = AddressMode::Repeat;
-  samplerDesc.magFilter = FilterMode::Linear;
-  samplerDesc.minFilter = FilterMode::Linear;
-  samplerDesc.mipmapFilter = MipmapFilterMode::Linear;
-  samplerDesc.lodMinClamp = 0.0f;
-  samplerDesc.lodMaxClamp = 8.0f;
-  samplerDesc.compare = CompareFunction::Undefined;
-  samplerDesc.maxAnisotropy = 1;
-  m_sampler = m_device.createSampler(samplerDesc);
+// bool Application::initTexture() {
+//   // Create a sampler
+//   SamplerDescriptor samplerDesc;
+//   samplerDesc.addressModeU = AddressMode::Repeat;
+//   samplerDesc.addressModeV = AddressMode::Repeat;
+//   samplerDesc.addressModeW = AddressMode::Repeat;
+//   samplerDesc.magFilter = FilterMode::Linear;
+//   samplerDesc.minFilter = FilterMode::Linear;
+//   samplerDesc.mipmapFilter = MipmapFilterMode::Linear;
+//   samplerDesc.lodMinClamp = 0.0f;
+//   samplerDesc.lodMaxClamp = 8.0f;
+//   samplerDesc.compare = CompareFunction::Undefined;
+//   samplerDesc.maxAnisotropy = 1;
+//   m_sampler = m_device.createSampler(samplerDesc);
 
-  // Create a texture
-  m_texture = ResourceManager::loadTexture(
-      RESOURCE_DIR "/fourareen2K_albedo.jpg", m_device, &m_textureView);
-  if (!m_texture) {
-    std::cerr << "Could not load texture!" << std::endl;
-    return false;
-  }
-  std::cout << "Texture: " << m_texture << std::endl;
-  std::cout << "Texture view: " << m_textureView << std::endl;
+//   // Create a texture
+//   m_texture = ResourceManager::loadTexture(
+//       RESOURCE_DIR "/fourareen2K_albedo.jpg", m_device, &m_textureView);
+//   if (!m_texture) {
+//     std::cerr << "Could not load texture!" << std::endl;
+//     return false;
+//   }
+//   std::cout << "Texture: " << m_texture << std::endl;
+//   std::cout << "Texture view: " << m_textureView << std::endl;
 
-  return m_textureView != nullptr;
-}
+//   return m_textureView != nullptr;
+// }
 
-void Application::terminateTexture() {
-  m_textureView.release();
-  m_texture.destroy();
-  m_texture.release();
-  m_sampler.release();
-}
+// void Application::terminateTexture() {
+//   m_textureView.release();
+//   m_texture.destroy();
+//   m_texture.release();
+//   m_sampler.release();
+// }
 
-bool Application::initGeometry() {
-  // Load mesh data from OBJ file
-  std::vector<VertexAttributes> vertexData;
-  bool success = ResourceManager::loadGeometryFromObj(
-      RESOURCE_DIR "/fourareen.obj", vertexData);
-  if (!success) {
-    std::cerr << "Could not load geometry!" << std::endl;
-    return false;
-  }
+// bool Application::initGeometry() {
+//   // Load mesh data from OBJ file
+//   std::vector<VertexAttributes> vertexData;
+//   bool success = ResourceManager::loadGeometryFromObj(
+//       RESOURCE_DIR "/fourareen.obj", vertexData);
+//   if (!success) {
+//     std::cerr << "Could not load geometry!" << std::endl;
+//     return false;
+//   }
 
-  // Create vertex buffer
-  BufferDescriptor bufferDesc;
-  bufferDesc.size = vertexData.size() * sizeof(VertexAttributes);
-  bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
-  bufferDesc.mappedAtCreation = false;
-  m_vertexBuffer = m_device.createBuffer(bufferDesc);
-  m_queue.writeBuffer(m_vertexBuffer, 0, vertexData.data(), bufferDesc.size);
+//   // Create vertex buffer
+//   BufferDescriptor bufferDesc;
+//   bufferDesc.size = vertexData.size() * sizeof(VertexAttributes);
+//   bufferDesc.usage = BufferUsage::CopyDst | BufferUsage::Vertex;
+//   bufferDesc.mappedAtCreation = false;
+//   m_vertexBuffer = m_device.createBuffer(bufferDesc);
+//   m_queue.writeBuffer(m_vertexBuffer, 0, vertexData.data(), bufferDesc.size);
 
-  m_vertexCount = static_cast<int>(vertexData.size());
+//   m_vertexCount = static_cast<int>(vertexData.size());
 
-  return m_vertexBuffer != nullptr;
-}
+//   return m_vertexBuffer != nullptr;
+// }
 
-void Application::terminateGeometry() {
-  m_vertexBuffer.destroy();
-  m_vertexBuffer.release();
-  m_vertexCount = 0;
-}
+// void Application::terminateGeometry() {
+//   m_vertexBuffer.destroy();
+//   m_vertexBuffer.release();
+//   m_vertexCount = 0;
+// }
 
 bool Application::initUniforms() {
   // Create uniform buffer
@@ -571,7 +587,7 @@ void Application::terminateUniforms() {
 }
 
 bool Application::initBindGroupLayout() {
-  std::vector<BindGroupLayoutEntry> bindingLayoutEntries(4, Default);
+  std::vector<BindGroupLayoutEntry> bindingLayoutEntries(2, Default);
 
   // The uniform buffer binding that we already had
   BindGroupLayoutEntry &bindingLayout = bindingLayoutEntries[0];
@@ -580,22 +596,22 @@ bool Application::initBindGroupLayout() {
   bindingLayout.buffer.type = BufferBindingType::Uniform;
   bindingLayout.buffer.minBindingSize = sizeof(MyUniforms);
 
-  // The texture binding
-  BindGroupLayoutEntry &textureBindingLayout = bindingLayoutEntries[1];
-  textureBindingLayout.binding = 1;
-  textureBindingLayout.visibility = ShaderStage::Fragment;
-  textureBindingLayout.texture.sampleType = TextureSampleType::Float;
-  textureBindingLayout.texture.viewDimension = TextureViewDimension::_2D;
+  // // The texture binding
+  // BindGroupLayoutEntry &textureBindingLayout = bindingLayoutEntries[1];
+  // textureBindingLayout.binding = 1;
+  // textureBindingLayout.visibility = ShaderStage::Fragment;
+  // textureBindingLayout.texture.sampleType = TextureSampleType::Float;
+  // textureBindingLayout.texture.viewDimension = TextureViewDimension::_2D;
 
-  // The texture sampler binding
-  BindGroupLayoutEntry &samplerBindingLayout = bindingLayoutEntries[2];
-  samplerBindingLayout.binding = 2;
-  samplerBindingLayout.visibility = ShaderStage::Fragment;
-  samplerBindingLayout.sampler.type = SamplerBindingType::Filtering;
+  // // The texture sampler binding
+  // BindGroupLayoutEntry &samplerBindingLayout = bindingLayoutEntries[2];
+  // samplerBindingLayout.binding = 2;
+  // samplerBindingLayout.visibility = ShaderStage::Fragment;
+  // samplerBindingLayout.sampler.type = SamplerBindingType::Filtering;
 
   // The lighting uniform buffer binding
-  BindGroupLayoutEntry &lightingUniformLayout = bindingLayoutEntries[3];
-  lightingUniformLayout.binding = 3;
+  BindGroupLayoutEntry &lightingUniformLayout = bindingLayoutEntries[1];
+  lightingUniformLayout.binding = 1;
   lightingUniformLayout.visibility = ShaderStage::Fragment;
   lightingUniformLayout.buffer.type = BufferBindingType::Uniform;
   lightingUniformLayout.buffer.minBindingSize = sizeof(LightingUniforms);
@@ -613,23 +629,23 @@ void Application::terminateBindGroupLayout() { m_bindGroupLayout.release(); }
 
 bool Application::initBindGroup() {
   // Create a binding
-  std::vector<BindGroupEntry> bindings(4);
+  std::vector<BindGroupEntry> bindings(2);
 
   bindings[0].binding = 0;
   bindings[0].buffer = m_uniformBuffer;
   bindings[0].offset = 0;
   bindings[0].size = sizeof(MyUniforms);
 
+  // bindings[1].binding = 1;
+  // bindings[1].textureView = m_textureView;
+
+  // bindings[2].binding = 2;
+  // bindings[2].sampler = m_sampler;
+
   bindings[1].binding = 1;
-  bindings[1].textureView = m_textureView;
-
-  bindings[2].binding = 2;
-  bindings[2].sampler = m_sampler;
-
-  bindings[3].binding = 3;
-  bindings[3].buffer = m_lightingUniformBuffer;
-  bindings[3].offset = 0;
-  bindings[3].size = sizeof(LightingUniforms);
+  bindings[1].buffer = m_lightingUniformBuffer;
+  bindings[1].offset = 0;
+  bindings[1].size = sizeof(LightingUniforms);
 
   BindGroupDescriptor bindGroupDesc;
   bindGroupDesc.layout = m_bindGroupLayout;
@@ -804,6 +820,7 @@ bool Application::initLightingUniforms() {
   m_lightingUniforms.colors[0] = {1.0f, 0.9f, 0.6f, 1.0f};
   m_lightingUniforms.colors[1] = {0.6f, 0.9f, 1.0f, 1.0f};
 
+  m_lightingUniformsChanged = true;
   updateLightingUniforms();
 
   return m_lightingUniformBuffer != nullptr;

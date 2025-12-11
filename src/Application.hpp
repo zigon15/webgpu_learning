@@ -26,7 +26,10 @@
 
 #pragma once
 
+#include "Mesh.hpp"
 #include <glm/glm.hpp>
+#include <memory>
+#include <vector>
 #include <webgpu/webgpu.hpp>
 
 // Forward declare
@@ -178,13 +181,13 @@ private:
   wgpu::RenderPipeline m_pipeline = nullptr;
 
   // Texture
-  wgpu::Sampler m_sampler = nullptr;
-  wgpu::Texture m_texture = nullptr;
-  wgpu::TextureView m_textureView = nullptr;
+  // wgpu::Sampler m_sampler = nullptr;
+  // wgpu::Texture m_texture = nullptr;
+  // wgpu::TextureView m_textureView = nullptr;
 
   // Geometry
-  wgpu::Buffer m_vertexBuffer = nullptr;
-  int m_vertexCount = 0;
+  // wgpu::Buffer m_vertexBuffer = nullptr;
+  // int m_vertexCount = 0;
 
   // Uniforms
   wgpu::Buffer m_uniformBuffer = nullptr;
@@ -199,5 +202,7 @@ private:
   CameraState m_cameraState;
   DragState m_drag;
 
-  bool m_lightingUniformsChanged = false;
+  bool m_lightingUniformsChanged = true;
+
+  std::vector<ZMesh *> _meshes;
 };

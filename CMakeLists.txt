@@ -10,6 +10,7 @@ add_executable(App
     src/Application.cpp 
     src/ResourceManager.cpp
     src/implementations.cpp
+    src/attributes/Mesh.cpp
 )
 
 set_target_properties(App PROPERTIES
@@ -38,7 +39,7 @@ target_compile_definitions(App PRIVATE
     RESOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/resources"
 )
 
-target_include_directories(App PRIVATE . ./lib/tinyObjLoader ./lib/stbImage ./lib/imgui)
+target_include_directories(App PRIVATE . ./lib/tinyObjLoader ./lib/stbImage ./lib/imgui ./src/attributes)
 
 
 # The application's binary must find wgpu.dll or libwgpu.so at runtime,
